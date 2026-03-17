@@ -918,19 +918,27 @@ async function getStats(env) {
 async function getAllKnowledge(env) {
   try {
     const answers = await env.DB.prepare(
-      'SELECT qa.id, qa.answer, qa.category, qa.keywords, GROUP_CONCAT(kq.question, "|") as questions FROM knowledge_answers qa LEFT JOIN knowledge_questions kq ON qa.id = kq.answer_id WHERE qa.enabled = 1 GROUP BY qa.id ORDER BY qa.created_at DESC'
+      'SELECT id, answer, category, keywords FROM knowledge_answers WHERE enabled = 1 ORDER BY id DESC'
     ).all();
     
-    const items = (answers.results || []).map(item => ({
-      id: item.id,
-      answer: item.answer,
-      category: item.category,
-      keywords: item.keywords,
-      questions: item.questions ? item.questions.split('|') : []
-    }));
+    const items = [];
+    for (const answer of (answers.results || [])) {
+      const questions = await env.DB.prepare(
+        'SELECT question FROM knowledge_questions WHERE answer_id = ? AND enabled = 1'
+      ).bind(answer.id).all();
+      
+      items.push({
+        id: answer.id,
+        answer: answer.answer,
+        category: answer.category,
+        keywords: answer.keywords,
+        questions: (questions.results || []).map(q => q.question)
+      });
+    }
     
     return jsonResponse(items);
   } catch (error) {
+    console.error('getAllKnowledge error:', error);
     return jsonResponse([]);
   }
 }
@@ -964,11 +972,17 @@ async function addKnowledge(request, env) {
     }
     
     // 插入答案 - 使用数据库默认时间戳
-    const answerResult = await env.DB.prepare(
+    await env.DB.prepare(
       'INSERT INTO knowledge_answers (answer, category, keywords) VALUES (?, ?, ?)'
     ).bind(answer, category || '', keywords || '').run();
     
-    const answerId = answerResult.meta.last_row_id;
+    // 获取最后插入的 ID
+    const lastIdResult = await env.DB.prepare('SELECT last_insert_rowid() as id').first();
+    const answerId = lastIdResult?.id;
+    
+    if (!answerId) {
+      return jsonResponse({ error: 'Failed to get answer ID' }, 500);
+    }
     
     // 插入问题变体 - 使用数据库默认时间戳
     for (const question of questions) {
@@ -981,7 +995,8 @@ async function addKnowledge(request, env) {
     
     return jsonResponse({ success: true, id: answerId });
   } catch (error) {
-    return jsonResponse({ error: error.message }, 500);
+    console.error('Add knowledge error:', error);
+    return jsonResponse({ error: error.message, stack: error.stack }, 500);
   }
 }
 
