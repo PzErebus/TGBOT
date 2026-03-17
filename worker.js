@@ -1,12 +1,12 @@
-// Cloudflare Worker - Telegram 智能知识库机器人 v4.5
-// 功能：轻量级AI意图识别 + 知识库检索，精准且省额度
+// Cloudflare Worker - Telegram 智能知识库机器人 v4.6
+// 功能：AI学习知识库回答 + 多问题对应同一答案
 
 const INDEX_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>知识库机器人管理 v4.5</title>
+    <title>知识库机器人管理 v4.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -20,10 +20,10 @@ const INDEX_HTML = `<!DOCTYPE html>
                         <i class="fas fa-brain text-indigo-500 mr-3"></i>
                         Telegram 智能知识库机器人
                     </h1>
-                    <p class="text-gray-600">AI意图识别 + 知识库检索，精准省额度</p>
+                    <p class="text-gray-600">AI学习知识库 + 多问题智能匹配</p>
                 </div>
                 <div class="text-right">
-                    <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">v4.5</span>
+                    <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">v4.6</span>
                 </div>
             </header>
 
@@ -35,7 +35,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                             <i class="fas fa-database text-xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm text-gray-500">知识库条目</p>
+                            <p class="text-sm text-gray-500">知识库答案</p>
                             <p class="text-2xl font-bold" id="kbCount">-</p>
                         </div>
                     </div>
@@ -57,7 +57,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                             <i class="fas fa-robot text-xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm text-gray-500">AI识别次数</p>
+                            <p class="text-sm text-gray-500">AI调用次数</p>
                             <p class="text-2xl font-bold" id="aiCalls">-</p>
                         </div>
                     </div>
@@ -97,7 +97,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                                        class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
                                 <span class="text-sm font-medium text-gray-700">仅在被 @ 时回复</span>
                             </label>
-                            <p class="text-xs text-gray-500">开启后只有被 @ 时才回复，关闭后主动监听所有消息</p>
+                            <p class="text-xs text-gray-500">开启后只有被 @ 时才回复</p>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -105,10 +105,20 @@ const INDEX_HTML = `<!DOCTYPE html>
                             <label class="flex items-center space-x-2 mb-2">
                                 <input type="checkbox" id="useAIClassifier" checked
                                        class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
-                                <span class="text-sm font-medium text-gray-700">使用AI意图识别（推荐）</span>
+                                <span class="text-sm font-medium text-gray-700">使用AI意图识别</span>
                             </label>
-                            <p class="text-xs text-gray-500">开启后先用AI判断是否需要回答，大幅减少误触发</p>
+                            <p class="text-xs text-gray-500">先用AI判断是否需要回答</p>
                         </div>
+                        <div>
+                            <label class="flex items-center space-x-2 mb-2">
+                                <input type="checkbox" id="useAIAnswer" checked
+                                       class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                <span class="text-sm font-medium text-gray-700">使用AI生成答案</span>
+                            </label>
+                            <p class="text-xs text-gray-500">AI学习知识库后生成回答，更智能</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label for="similarityThreshold" class="block text-sm font-medium text-gray-700 mb-1">
                                 匹配相似度阈值: <span id="thresholdValue">0.6</span>
@@ -116,6 +126,14 @@ const INDEX_HTML = `<!DOCTYPE html>
                             <input type="range" id="similarityThreshold" min="0.3" max="0.95" step="0.05" value="0.6"
                                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
                             <p class="text-xs text-gray-500 mt-1">0.3=宽松，0.95=严格</p>
+                        </div>
+                        <div>
+                            <label for="maxContextItems" class="block text-sm font-medium text-gray-700 mb-1">
+                                AI参考知识数量: <span id="contextValue">5</span>
+                            </label>
+                            <input type="range" id="maxContextItems" min="1" max="10" step="1" value="5"
+                                   class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <p class="text-xs text-gray-500 mt-1">AI回答时参考的知识库条目数</p>
                         </div>
                     </div>
                     <button type="submit" 
@@ -131,21 +149,23 @@ const INDEX_HTML = `<!DOCTYPE html>
                     <i class="fas fa-book text-blue-500 mr-2"></i>
                     知识库管理
                 </h2>
-                <p class="text-sm text-gray-600 mb-4">添加常见问题和答案，AI会判断用户是否在问这些问题</p>
+                <p class="text-sm text-gray-600 mb-4">一个答案可以对应多个问题（同义词/变体）</p>
                 
                 <form id="kbForm" class="space-y-4 mb-6">
-                    <input type="hidden" id="editId" value="">
-                    <div>
-                        <label for="question" class="block text-sm font-medium text-gray-700 mb-1">问题 *</label>
-                        <input type="text" id="question" name="question" 
-                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                               placeholder="例如：怎么联系客服？价格是多少？" required>
-                    </div>
+                    <input type="hidden" id="editAnswerId" value="">
                     <div>
                         <label for="answer" class="block text-sm font-medium text-gray-700 mb-1">答案 *</label>
                         <textarea id="answer" name="answer" rows="3"
                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  placeholder="输入问题的答案..." required></textarea>
+                                  placeholder="输入标准答案..." required></textarea>
+                    </div>
+                    <div>
+                        <label for="questions" class="block text-sm font-medium text-gray-700 mb-1">
+                            问题变体 * <span class="text-xs text-gray-500">（每行一个，支持多个问法对应同一答案）</span>
+                        </label>
+                        <textarea id="questions" name="questions" rows="4"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="怎么联系客服？&#10;客服电话是多少？&#10;如何联系你们？" required></textarea>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -158,7 +178,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                             <label for="keywords" class="block text-sm font-medium text-gray-700 mb-1">关键词（可选）</label>
                             <input type="text" id="keywords" name="keywords" 
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                   placeholder="用逗号分隔，例如：价格,多少钱,费用">
+                                   placeholder="用逗号分隔">
                         </div>
                     </div>
                     <div class="flex space-x-3">
@@ -216,7 +236,6 @@ const INDEX_HTML = `<!DOCTYPE html>
     <script>
         const API_BASE_URL = window.location.origin;
 
-        // 加载统计
         async function loadStats() {
             try {
                 const res = await fetch(API_BASE_URL + '/manage/stats');
@@ -230,7 +249,6 @@ const INDEX_HTML = `<!DOCTYPE html>
             }
         }
 
-        // 加载配置
         async function loadConfig() {
             try {
                 const res = await fetch(API_BASE_URL + '/manage/config');
@@ -238,26 +256,33 @@ const INDEX_HTML = `<!DOCTYPE html>
                 document.getElementById('botEnabled').checked = config.botEnabled !== false;
                 document.getElementById('onlyMentioned').checked = config.onlyMentioned === true;
                 document.getElementById('useAIClassifier').checked = config.useAIClassifier !== false;
+                document.getElementById('useAIAnswer').checked = config.useAIAnswer !== false;
                 document.getElementById('similarityThreshold').value = config.similarityThreshold || 0.6;
                 document.getElementById('thresholdValue').textContent = config.similarityThreshold || 0.6;
+                document.getElementById('maxContextItems').value = config.maxContextItems || 5;
+                document.getElementById('contextValue').textContent = config.maxContextItems || 5;
             } catch (e) {
                 console.error('加载配置失败:', e);
             }
         }
 
-        // 阈值滑块
         document.getElementById('similarityThreshold').addEventListener('input', (e) => {
             document.getElementById('thresholdValue').textContent = e.target.value;
         });
 
-        // 保存配置
+        document.getElementById('maxContextItems').addEventListener('input', (e) => {
+            document.getElementById('contextValue').textContent = e.target.value;
+        });
+
         document.getElementById('configForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const config = {
                 botEnabled: document.getElementById('botEnabled').checked,
                 onlyMentioned: document.getElementById('onlyMentioned').checked,
                 useAIClassifier: document.getElementById('useAIClassifier').checked,
-                similarityThreshold: parseFloat(document.getElementById('similarityThreshold').value)
+                useAIAnswer: document.getElementById('useAIAnswer').checked,
+                similarityThreshold: parseFloat(document.getElementById('similarityThreshold').value),
+                maxContextItems: parseInt(document.getElementById('maxContextItems').value)
             };
             
             try {
@@ -276,7 +301,6 @@ const INDEX_HTML = `<!DOCTYPE html>
             }
         });
 
-        // 加载知识库
         async function loadKnowledgeBase() {
             try {
                 const res = await fetch(API_BASE_URL + '/manage/knowledge');
@@ -292,8 +316,8 @@ const INDEX_HTML = `<!DOCTYPE html>
             const searchTerm = document.getElementById('searchKb').value.toLowerCase();
             
             const filtered = items.filter(item => 
-                item.question.toLowerCase().includes(searchTerm) || 
-                item.answer.toLowerCase().includes(searchTerm) ||
+                item.answer.toLowerCase().includes(searchTerm) || 
+                item.questions.some(q => q.toLowerCase().includes(searchTerm)) ||
                 (item.category && item.category.toLowerCase().includes(searchTerm))
             );
             
@@ -306,8 +330,11 @@ const INDEX_HTML = `<!DOCTYPE html>
                 return '<div class="border border-gray-200 rounded-lg p-4">' +
                     '<div class="flex justify-between items-start">' +
                         '<div class="flex-1">' +
-                            '<div class="font-medium text-gray-900 mb-1">' + escapeHtml(item.question) + '</div>' +
-                            (item.category ? '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2">' + escapeHtml(item.category) + '</span>' : '') +
+                            '<div class="text-sm text-gray-500 mb-1">问题变体：</div>' +
+                            '<div class="flex flex-wrap gap-2 mb-2">' +
+                                item.questions.map(q => '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">' + escapeHtml(q) + '</span>').join('') +
+                            '</div>' +
+                            (item.category ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded mr-2">' + escapeHtml(item.category) + '</span>' : '') +
                             '<div class="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded">' + escapeHtml(item.answer) + '</div>' +
                         '</div>' +
                         '<div class="space-x-2 ml-4">' +
@@ -325,18 +352,16 @@ const INDEX_HTML = `<!DOCTYPE html>
             return div.innerHTML;
         }
 
-        // 搜索知识库
         document.getElementById('searchKb').addEventListener('input', () => {
             loadKnowledgeBase();
         });
 
-        // 添加/编辑知识
         document.getElementById('kbForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const editId = document.getElementById('editId').value;
+            const editId = document.getElementById('editAnswerId').value;
             const data = {
-                question: document.getElementById('question').value.trim(),
                 answer: document.getElementById('answer').value.trim(),
+                questions: document.getElementById('questions').value.split('\n').map(q => q.trim()).filter(q => q),
                 category: document.getElementById('category').value.trim(),
                 keywords: document.getElementById('keywords').value.trim()
             };
@@ -363,9 +388,9 @@ const INDEX_HTML = `<!DOCTYPE html>
             try {
                 const res = await fetch(API_BASE_URL + '/manage/knowledge/' + id);
                 const item = await res.json();
-                document.getElementById('editId').value = item.id;
-                document.getElementById('question').value = item.question;
+                document.getElementById('editAnswerId').value = item.id;
                 document.getElementById('answer').value = item.answer;
+                document.getElementById('questions').value = item.questions.join('\n');
                 document.getElementById('category').value = item.category || '';
                 document.getElementById('keywords').value = item.keywords || '';
                 document.getElementById('submitBtnText').textContent = '保存修改';
@@ -386,13 +411,12 @@ const INDEX_HTML = `<!DOCTYPE html>
         }
 
         function cancelEdit() {
-            document.getElementById('editId').value = '';
+            document.getElementById('editAnswerId').value = '';
             document.getElementById('kbForm').reset();
             document.getElementById('submitBtnText').textContent = '添加知识';
             document.getElementById('cancelEditBtn').classList.add('hidden');
         }
 
-        // 加载未回答问题
         async function loadUnanswered() {
             try {
                 const res = await fetch(API_BASE_URL + '/manage/unanswered');
@@ -426,7 +450,6 @@ const INDEX_HTML = `<!DOCTYPE html>
             alert('请手动复制问题到知识库表单中添加');
         }
 
-        // 页面加载
         window.onload = () => {
             loadStats();
             loadConfig();
@@ -437,10 +460,8 @@ const INDEX_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-// 配置缓存
 let configCache = null;
 
-// 主处理函数
 async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -449,17 +470,14 @@ async function handleRequest(request, env) {
     return handleCORS();
   }
   
-  // Telegram Webhook
   if (request.method === 'POST' && path === '/webhook') {
     return await handleTelegramWebhook(request, env);
   }
   
-  // 统计
   if (request.method === 'GET' && path === '/manage/stats') {
     return await getStats(env);
   }
   
-  // 配置
   if (path === '/manage/config') {
     if (request.method === 'GET') {
       return await getConfig(env);
@@ -469,7 +487,6 @@ async function handleRequest(request, env) {
     }
   }
   
-  // 知识库
   if (path === '/manage/knowledge') {
     if (request.method === 'GET') {
       return await getAllKnowledge(env);
@@ -493,19 +510,17 @@ async function handleRequest(request, env) {
     }
   }
   
-  // 未回答问题
   if (request.method === 'GET' && path === '/manage/unanswered') {
     return await getUnanswered(env);
   }
   
-  // 管理界面
   if (request.method === 'GET' && path === '/') {
     return new Response(INDEX_HTML, {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
   }
   
-  return new Response('Telegram Knowledge Bot v4.5 is running!', { status: 200 });
+  return new Response('Telegram Knowledge Bot v4.6 is running!', { status: 200 });
 }
 
 function handleCORS() {
@@ -528,7 +543,6 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-// 获取配置
 async function getConfig(env) {
   try {
     const config = await env.DB.prepare('SELECT * FROM bot_config WHERE id = 1').first();
@@ -537,14 +551,18 @@ async function getConfig(env) {
         botEnabled: config.bot_enabled === 1,
         onlyMentioned: config.only_mentioned === 1,
         useAIClassifier: config.use_ai_classifier !== 0,
-        similarityThreshold: config.similarity_threshold || 0.6
+        useAIAnswer: config.use_ai_answer !== 0,
+        similarityThreshold: config.similarity_threshold || 0.6,
+        maxContextItems: config.max_context_items || 5
       };
     } else {
       configCache = {
         botEnabled: true,
         onlyMentioned: false,
         useAIClassifier: true,
-        similarityThreshold: 0.6
+        useAIAnswer: true,
+        similarityThreshold: 0.6,
+        maxContextItems: 5
       };
     }
     return jsonResponse(configCache);
@@ -553,35 +571,37 @@ async function getConfig(env) {
       botEnabled: true,
       onlyMentioned: false,
       useAIClassifier: true,
-      similarityThreshold: 0.6
+      useAIAnswer: true,
+      similarityThreshold: 0.6,
+      maxContextItems: 5
     });
   }
 }
 
-// 保存配置
 async function saveConfig(request, env) {
   try {
     const body = await request.json();
-    const { botEnabled, onlyMentioned, useAIClassifier, similarityThreshold } = body;
+    const { botEnabled, onlyMentioned, useAIClassifier, useAIAnswer, similarityThreshold, maxContextItems } = body;
     
     await env.DB.prepare(
-      'INSERT OR REPLACE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, similarity_threshold, updated_at) VALUES (1, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       botEnabled ? 1 : 0,
       onlyMentioned ? 1 : 0,
       useAIClassifier ? 1 : 0,
+      useAIAnswer ? 1 : 0,
       similarityThreshold,
+      maxContextItems,
       new Date().toISOString()
     ).run();
     
-    configCache = { botEnabled, onlyMentioned, useAIClassifier, similarityThreshold };
+    configCache = { botEnabled, onlyMentioned, useAIClassifier, useAIAnswer, similarityThreshold, maxContextItems };
     return jsonResponse({ success: true });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
   }
 }
 
-// 处理 Telegram Webhook
 async function handleTelegramWebhook(request, env) {
   try {
     const update = await request.json();
@@ -601,72 +621,70 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
     
-    // 记录消息
     await env.DB.prepare(
       'INSERT INTO messages (chat_id, user_id, user_name, message, chat_type, created_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(chatId, userId, userName, messageText, chatType, new Date().toISOString()).run();
     
-    // 获取配置
     if (!configCache) {
       await getConfig(env);
     }
     
-    // 检查机器人是否启用
     if (!configCache.botEnabled) {
       return new Response('OK', { status: 200 });
     }
     
-    // 检查是否被 @
     const botInfo = await getBotInfo(env.TELEGRAM_BOT_TOKEN);
     const botUsername = botInfo?.result?.username || '';
     const isMentioned = messageText.includes('@' + botUsername) || chatType === 'private';
     
-    // 如果设置了仅在被 @ 时回复，且没有被 @，则不回复
     if (configCache.onlyMentioned && !isMentioned && chatType !== 'private') {
       return new Response('OK', { status: 200 });
     }
     
-    // 清理消息文本
     let cleanText = messageText.replace(new RegExp('@' + botUsername, 'g'), '').trim();
     
-    // 步骤1：使用AI判断用户是否在问知识库相关问题
+    // 步骤1：AI意图识别
     let shouldAnswer = false;
     
     if (configCache.useAIClassifier !== false) {
-      // 使用AI分类器
       const classification = await classifyIntent(env, cleanText);
       shouldAnswer = classification.shouldAnswer;
       
-      // 记录AI调用
       await env.DB.prepare(
         'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?)'
       ).bind(chatId, userId, cleanText, classification.intent, classification.confidence, new Date().toISOString()).run();
     } else {
-      // 不使用AI，直接尝试匹配
       shouldAnswer = true;
     }
     
     if (!shouldAnswer) {
-      // AI判断不需要回答，直接返回
       return new Response('OK', { status: 200 });
     }
     
     // 步骤2：在知识库中搜索最匹配的问题
-    const matches = await findBestMatches(env, cleanText, 1);
+    const matches = await findBestMatches(env, cleanText, configCache.maxContextItems || 5);
     
     if (matches.length > 0 && matches[0].similarity >= (configCache.similarityThreshold || 0.6)) {
-      // 找到匹配答案
-      const responseText = matches[0].answer;
+      let responseText;
+      let answerType;
+      
+      if (configCache.useAIAnswer !== false && matches[0].similarity < 0.95) {
+        // 使用AI生成答案，参考匹配到的知识库
+        responseText = await generateAIAnswer(env, cleanText, matches);
+        answerType = 'ai';
+      } else {
+        // 直接使用知识库答案
+        responseText = matches[0].answer;
+        answerType = 'kb';
+      }
       
       await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
-      await recordAnswer(env, chatId, userId, userName, cleanText, responseText, matches[0].similarity);
+      await recordAnswer(env, chatId, userId, userName, cleanText, responseText, answerType, matches[0].similarity);
       
-      // 更新使用统计
       await env.DB.prepare(
         'UPDATE bot_stats SET answers_today = answers_today + 1, total_answers = total_answers + 1 WHERE date = ?'
       ).bind(new Date().toISOString().split('T')[0]).run();
     } else {
-      // 未找到匹配，记录到未回答问题
       await env.DB.prepare(
         'INSERT INTO unanswered (chat_id, user_id, user_name, message, chat_type, ai_classified, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)'
       ).bind(chatId, userId, userName, cleanText, chatType, new Date().toISOString()).run();
@@ -679,15 +697,21 @@ async function handleTelegramWebhook(request, env) {
   }
 }
 
-// AI意图分类 - 使用轻量级模型
+// AI意图分类
 async function classifyIntent(env, message) {
   try {
-    // 获取所有知识库问题作为上下文
-    const knowledgeBase = await env.DB.prepare('SELECT question, category FROM knowledge_base WHERE enabled = 1').all();
-    const sampleQuestions = knowledgeBase.results.slice(0, 10).map(k => k.question).join('\n');
+    // 获取知识库样本
+    const knowledgeBase = await env.DB.prepare(
+      'SELECT qa.answer, GROUP_CONCAT(kq.question, "|") as questions FROM knowledge_answers qa JOIN knowledge_questions kq ON qa.id = kq.answer_id WHERE qa.enabled = 1 AND kq.enabled = 1 GROUP BY qa.id LIMIT 5'
+    ).all();
+    
+    const sampleQA = knowledgeBase.results.map(k => {
+      const questions = k.questions.split('|').slice(0, 2).join(', ');
+      return `问题示例：${questions}`;
+    }).join('\n');
     
     const systemPrompt = `你是一个意图分类器。判断用户消息是否在询问以下类型的问题：
-${sampleQuestions}
+${sampleQA}
 
 如果用户在问以上类似的问题，回复：ANSWER
 如果用户在闲聊、打招呼或问无关问题，回复：IGNORE
@@ -712,35 +736,80 @@ ${sampleQuestions}
     };
   } catch (error) {
     console.error('AI classification error:', error);
-    // AI失败时默认尝试回答
     return { shouldAnswer: true, intent: 'unknown', confidence: 0.5 };
   }
 }
 
-// 在知识库中查找最佳匹配
-async function findBestMatches(env, query, maxResults = 1) {
+// AI生成答案，参考知识库
+async function generateAIAnswer(env, userQuestion, matches) {
   try {
-    const allKnowledge = await env.DB.prepare('SELECT * FROM knowledge_base WHERE enabled = 1').all();
+    // 构建知识库上下文
+    const context = matches.slice(0, 3).map((m, i) => {
+      return `参考${i + 1}：\n问题：${m.question}\n答案：${m.answer}`;
+    }).join('\n\n');
     
-    if (!allKnowledge.results || allKnowledge.results.length === 0) {
+    const systemPrompt = `你是一个智能客服助手。请根据以下知识库内容，回答用户的问题。
+如果知识库中有直接匹配的答案，请基于知识库内容回答。
+如果知识库中没有完全匹配的答案，请根据最相关的知识进行合理回答。
+回答要简洁、准确、友好。
+
+知识库内容：
+${context}`;
+
+    const response = await env.AI.run('@cf/meta/llama-3.2-1b-instruct', {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userQuestion }
+      ],
+      temperature: 0.3,
+      max_tokens: 500
+    });
+    
+    return response.response?.trim() || matches[0].answer;
+  } catch (error) {
+    console.error('AI answer generation error:', error);
+    // AI失败时返回最佳匹配的原始答案
+    return matches[0].answer;
+  }
+}
+
+// 在知识库中查找最佳匹配
+async function findBestMatches(env, query, maxResults = 5) {
+  try {
+    const allQuestions = await env.DB.prepare(
+      'SELECT kq.id, kq.question, kq.answer_id, kq.keywords, qa.answer FROM knowledge_questions kq JOIN knowledge_answers qa ON kq.answer_id = qa.id WHERE kq.enabled = 1 AND qa.enabled = 1'
+    ).all();
+    
+    if (!allQuestions.results || allQuestions.results.length === 0) {
       return [];
     }
     
-    const scored = allKnowledge.results.map(item => {
+    const scored = allQuestions.results.map(item => {
       const similarity = calculateSimilarity(query, item.question, item.keywords);
       return { ...item, similarity };
     });
     
     scored.sort((a, b) => b.similarity - a.similarity);
     
-    return scored.slice(0, maxResults);
+    // 去重，同一答案只保留最佳匹配
+    const seenAnswers = new Set();
+    const uniqueMatches = [];
+    
+    for (const item of scored) {
+      if (!seenAnswers.has(item.answer_id)) {
+        seenAnswers.add(item.answer_id);
+        uniqueMatches.push(item);
+        if (uniqueMatches.length >= maxResults) break;
+      }
+    }
+    
+    return uniqueMatches;
   } catch (error) {
     console.error('Find matches error:', error);
     return [];
   }
 }
 
-// 计算相似度
 function calculateSimilarity(query, question, keywords) {
   const queryLower = query.toLowerCase();
   const questionLower = question.toLowerCase();
@@ -767,7 +836,6 @@ function calculateSimilarity(query, question, keywords) {
   return similarity;
 }
 
-// 编辑距离算法
 function levenshteinDistance(str1, str2) {
   const m = str1.length;
   const n = str2.length;
@@ -793,7 +861,6 @@ function levenshteinDistance(str1, str2) {
   return dp[m][n];
 }
 
-// 获取机器人信息
 async function getBotInfo(botToken) {
   try {
     const response = await fetch('https://api.telegram.org/bot' + botToken + '/getMe');
@@ -803,7 +870,6 @@ async function getBotInfo(botToken) {
   }
 }
 
-// 发送消息
 async function sendTelegramMessage(botToken, chatId, text, replyToMessageId) {
   const url = 'https://api.telegram.org/bot' + botToken + '/sendMessage';
   const payload = { chat_id: chatId, text: text };
@@ -818,27 +884,24 @@ async function sendTelegramMessage(botToken, chatId, text, replyToMessageId) {
   return response.ok;
 }
 
-// 记录回答
-async function recordAnswer(env, chatId, userId, userName, question, answer, similarity) {
+async function recordAnswer(env, chatId, userId, userName, question, answer, answerType, similarity) {
   try {
     await env.DB.prepare(
-      'INSERT INTO answers (chat_id, user_id, user_name, question, answer, similarity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(chatId, userId, userName, question, answer, similarity, new Date().toISOString()).run();
+      'INSERT INTO answers (chat_id, user_id, user_name, question, answer, answer_type, similarity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(chatId, userId, userName, question, answer, answerType, similarity, new Date().toISOString()).run();
   } catch (e) {
     console.error('Record answer error:', e);
   }
 }
 
-// 获取统计
 async function getStats(env) {
   try {
-    const kbResult = await env.DB.prepare('SELECT COUNT(*) as count FROM knowledge_base WHERE enabled = 1').first();
+    const kbResult = await env.DB.prepare('SELECT COUNT(*) as count FROM knowledge_answers WHERE enabled = 1').first();
     const today = new Date().toISOString().split('T')[0];
     const todayResult = await env.DB.prepare('SELECT answers_today FROM bot_stats WHERE date = ?').bind(today).first();
     const aiCallsResult = await env.DB.prepare('SELECT COUNT(*) as count FROM ai_calls WHERE DATE(created_at) = ?').bind(today).first();
     const totalAiCalls = await env.DB.prepare('SELECT COUNT(*) as count FROM ai_calls').first();
     
-    // 估算AI消耗 (Llama 3.2 1B 每次约15 neurons)
     const aiUsage = (totalAiCalls?.count || 0) * 15;
     
     return jsonResponse({
@@ -852,55 +915,97 @@ async function getStats(env) {
   }
 }
 
-// 获取所有知识库条目
 async function getAllKnowledge(env) {
   try {
-    const items = await env.DB.prepare('SELECT * FROM knowledge_base ORDER BY created_at DESC').all();
-    return jsonResponse(items.results || []);
+    const answers = await env.DB.prepare(
+      'SELECT qa.id, qa.answer, qa.category, qa.keywords, GROUP_CONCAT(kq.question, "|") as questions FROM knowledge_answers qa LEFT JOIN knowledge_questions kq ON qa.id = kq.answer_id WHERE qa.enabled = 1 GROUP BY qa.id ORDER BY qa.created_at DESC'
+    ).all();
+    
+    const items = (answers.results || []).map(item => ({
+      id: item.id,
+      answer: item.answer,
+      category: item.category,
+      keywords: item.keywords,
+      questions: item.questions ? item.questions.split('|') : []
+    }));
+    
+    return jsonResponse(items);
   } catch (error) {
     return jsonResponse([]);
   }
 }
 
-// 获取单个知识库条目
 async function getKnowledge(id, env) {
   try {
-    const item = await env.DB.prepare('SELECT * FROM knowledge_base WHERE id = ?').bind(id).first();
-    return jsonResponse(item);
+    const answer = await env.DB.prepare('SELECT * FROM knowledge_answers WHERE id = ?').bind(id).first();
+    if (!answer) return jsonResponse({ error: 'Not found' }, 404);
+    
+    const questions = await env.DB.prepare('SELECT question FROM knowledge_questions WHERE answer_id = ? AND enabled = 1').bind(id).all();
+    
+    return jsonResponse({
+      id: answer.id,
+      answer: answer.answer,
+      category: answer.category,
+      keywords: answer.keywords,
+      questions: questions.results.map(q => q.question)
+    });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
   }
 }
 
-// 添加知识库条目
 async function addKnowledge(request, env) {
   try {
     const body = await request.json();
-    const { question, answer, category, keywords } = body;
+    const { answer, questions, category, keywords } = body;
     
-    if (!question || !answer) {
-      return jsonResponse({ error: 'question and answer are required' }, 400);
+    if (!answer || !questions || questions.length === 0) {
+      return jsonResponse({ error: 'answer and questions are required' }, 400);
     }
     
-    const result = await env.DB.prepare(
-      'INSERT INTO knowledge_base (question, answer, category, keywords, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).bind(question, answer, category || '', keywords || '', new Date().toISOString()).run();
+    // 插入答案
+    const answerResult = await env.DB.prepare(
+      'INSERT INTO knowledge_answers (answer, category, keywords, created_at) VALUES (?, ?, ?, ?)'
+    ).bind(answer, category || '', keywords || '', new Date().toISOString()).run();
     
-    return jsonResponse({ success: true, id: result.meta.last_row_id });
+    const answerId = answerResult.meta.last_row_id;
+    
+    // 插入问题变体
+    for (const question of questions) {
+      if (question.trim()) {
+        await env.DB.prepare(
+          'INSERT INTO knowledge_questions (answer_id, question, keywords, created_at) VALUES (?, ?, ?, ?)'
+        ).bind(answerId, question.trim(), keywords || '', new Date().toISOString()).run();
+      }
+    }
+    
+    return jsonResponse({ success: true, id: answerId });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
   }
 }
 
-// 更新知识库条目
 async function updateKnowledge(id, request, env) {
   try {
     const body = await request.json();
-    const { question, answer, category, keywords } = body;
+    const { answer, questions, category, keywords } = body;
     
+    // 更新答案
     await env.DB.prepare(
-      'UPDATE knowledge_base SET question = ?, answer = ?, category = ?, keywords = ? WHERE id = ?'
-    ).bind(question, answer, category, keywords, id).run();
+      'UPDATE knowledge_answers SET answer = ?, category = ?, keywords = ? WHERE id = ?'
+    ).bind(answer, category, keywords, id).run();
+    
+    // 删除旧问题
+    await env.DB.prepare('DELETE FROM knowledge_questions WHERE answer_id = ?').bind(id).run();
+    
+    // 插入新问题
+    for (const question of questions) {
+      if (question.trim()) {
+        await env.DB.prepare(
+          'INSERT INTO knowledge_questions (answer_id, question, keywords, created_at) VALUES (?, ?, ?, ?)'
+        ).bind(id, question.trim(), keywords, new Date().toISOString()).run();
+      }
+    }
     
     return jsonResponse({ success: true });
   } catch (error) {
@@ -908,17 +1013,16 @@ async function updateKnowledge(id, request, env) {
   }
 }
 
-// 删除知识库条目
 async function deleteKnowledge(id, env) {
   try {
-    await env.DB.prepare('DELETE FROM knowledge_base WHERE id = ?').bind(id).run();
+    // 级联删除会自动删除相关问题
+    await env.DB.prepare('DELETE FROM knowledge_answers WHERE id = ?').bind(id).run();
     return jsonResponse({ success: true });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
   }
 }
 
-// 获取未回答问题
 async function getUnanswered(env) {
   try {
     const items = await env.DB.prepare(
@@ -930,7 +1034,6 @@ async function getUnanswered(env) {
   }
 }
 
-// Worker 入口
 export default {
   async fetch(request, env, ctx) {
     return handleRequest(request, env);

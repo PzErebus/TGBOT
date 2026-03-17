@@ -1,5 +1,5 @@
--- Telegram 智能知识库机器人 v4.5 数据库结构
--- 功能：轻量级AI意图识别 + 知识库检索
+-- Telegram 智能知识库机器人 v4.6 数据库结构
+-- 功能：AI学习知识库回答 + 多问题对应同一答案
 
 -- 机器人配置表
 CREATE TABLE IF NOT EXISTS bot_config (
@@ -7,21 +7,33 @@ CREATE TABLE IF NOT EXISTS bot_config (
   bot_enabled INTEGER DEFAULT 1,
   only_mentioned INTEGER DEFAULT 0,
   use_ai_classifier INTEGER DEFAULT 1,
+  use_ai_answer INTEGER DEFAULT 1,
   similarity_threshold REAL DEFAULT 0.6,
+  max_context_items INTEGER DEFAULT 5,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 知识库表
-CREATE TABLE IF NOT EXISTS knowledge_base (
+-- 知识库答案表（一个答案对应多个问题）
+CREATE TABLE IF NOT EXISTS knowledge_answers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  question TEXT NOT NULL,
   answer TEXT NOT NULL,
   category TEXT,
-  keywords TEXT,
   enabled INTEGER DEFAULT 1,
   use_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 知识库问题表（多个问题指向同一个答案）
+CREATE TABLE IF NOT EXISTS knowledge_questions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  answer_id INTEGER NOT NULL,
+  question TEXT NOT NULL,
+  keywords TEXT,
+  priority INTEGER DEFAULT 0,
+  enabled INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (answer_id) REFERENCES knowledge_answers(id) ON DELETE CASCADE
 );
 
 -- 消息记录表
@@ -43,6 +55,8 @@ CREATE TABLE IF NOT EXISTS ai_calls (
   message TEXT NOT NULL,
   intent TEXT,
   confidence REAL,
+  prompt_tokens INTEGER,
+  response_tokens INTEGER,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -54,6 +68,7 @@ CREATE TABLE IF NOT EXISTS answers (
   user_name TEXT,
   question TEXT NOT NULL,
   answer TEXT NOT NULL,
+  answer_type TEXT DEFAULT 'kb',
   similarity REAL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -81,8 +96,8 @@ CREATE TABLE IF NOT EXISTS bot_stats (
 );
 
 -- 插入默认配置
-INSERT OR IGNORE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, similarity_threshold) 
-VALUES (1, 1, 0, 1, 0.6);
+INSERT OR IGNORE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items) 
+VALUES (1, 1, 0, 1, 1, 0.6, 5);
 
 -- 插入今天的统计记录
 INSERT OR IGNORE INTO bot_stats (date, answers_today, total_answers, ai_calls_today) 
@@ -94,4 +109,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_ai_calls_created_at ON ai_calls(created_at);
 CREATE INDEX IF NOT EXISTS idx_answers_chat_id ON answers(chat_id);
 CREATE INDEX IF NOT EXISTS idx_unanswered_ai_classified ON unanswered(ai_classified);
-CREATE INDEX IF NOT EXISTS idx_knowledge_base_enabled ON knowledge_base(enabled);
+CREATE INDEX IF NOT EXISTS idx_knowledge_answers_enabled ON knowledge_answers(enabled);
+CREATE INDEX IF NOT EXISTS idx_knowledge_questions_answer_id ON knowledge_questions(answer_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_questions_enabled ON knowledge_questions(enabled);
