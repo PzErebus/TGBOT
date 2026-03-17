@@ -165,7 +165,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                         </label>
                         <textarea id="questions" name="questions" rows="4"
                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  placeholder="怎么联系客服？&#10;客服电话是多少？&#10;如何联系你们？" required></textarea>
+                                  placeholder="怎么联系客服？\n客服电话是多少？\n如何联系你们？" required></textarea>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -327,14 +327,14 @@ const INDEX_HTML = `<!DOCTYPE html>
             }
             
             list.innerHTML = filtered.map(item => {
+                const questionsHtml = item.questions.map(q => '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">' + escapeHtml(q) + '</span>').join('');
+                const categoryHtml = item.category ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded mr-2">' + escapeHtml(item.category) + '</span>' : '';
                 return '<div class="border border-gray-200 rounded-lg p-4">' +
                     '<div class="flex justify-between items-start">' +
                         '<div class="flex-1">' +
                             '<div class="text-sm text-gray-500 mb-1">问题变体：</div>' +
-                            '<div class="flex flex-wrap gap-2 mb-2">' +
-                                item.questions.map(q => '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">' + escapeHtml(q) + '</span>').join('') +
-                            '</div>' +
-                            (item.category ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded mr-2">' + escapeHtml(item.category) + '</span>' : '') +
+                            '<div class="flex flex-wrap gap-2 mb-2">' + questionsHtml + '</div>' +
+                            categoryHtml +
                             '<div class="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded">' + escapeHtml(item.answer) + '</div>' +
                         '</div>' +
                         '<div class="space-x-2 ml-4">' +
@@ -361,7 +361,7 @@ const INDEX_HTML = `<!DOCTYPE html>
             const editId = document.getElementById('editAnswerId').value;
             const data = {
                 answer: document.getElementById('answer').value.trim(),
-                questions: document.getElementById('questions').value.split('\n').map(q => q.trim()).filter(q => q),
+                questions: document.getElementById('questions').value.split('\\n').map(q => q.trim()).filter(q => q),
                 category: document.getElementById('category').value.trim(),
                 keywords: document.getElementById('keywords').value.trim()
             };
@@ -390,7 +390,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                 const item = await res.json();
                 document.getElementById('editAnswerId').value = item.id;
                 document.getElementById('answer').value = item.answer;
-                document.getElementById('questions').value = item.questions.join('\n');
+                document.getElementById('questions').value = item.questions.join('\\n');
                 document.getElementById('category').value = item.category || '';
                 document.getElementById('keywords').value = item.keywords || '';
                 document.getElementById('submitBtnText').textContent = '保存修改';
