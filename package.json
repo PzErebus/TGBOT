@@ -1,0 +1,26 @@
+{
+  "name": "telegram-knowledge-bot",
+  "version": "4.0.0",
+  "description": "Telegram 智能知识库机器人 - 基于 Cloudflare Workers + D1 数据库，零 AI 消耗",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "d1:init": "wrangler d1 execute telegram-kb-db --file=v4_schema.sql --remote"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "knowledge-base",
+    "cloudflare-workers",
+    "d1",
+    "faq",
+    "auto-reply"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
