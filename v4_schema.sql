@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS knowledge_answers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   answer TEXT NOT NULL,
   category TEXT,
+  keywords TEXT,
   enabled INTEGER DEFAULT 1,
   use_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

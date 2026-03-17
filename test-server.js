@@ -51,6 +51,7 @@ class MockDB {
         enabled: 1, use_count: 0,
         created_at: new Date().toISOString()
       });
+      this.lastInsertId = id;
       return { meta: { last_row_id: id } };
     }
 
@@ -160,6 +161,10 @@ class MockDB {
     console.log('SQL (first):', sql);
     console.log('Params:', params);
 
+    if (sql.includes('SELECT last_insert_rowid()')) {
+      return { id: this.lastInsertId || 1 };
+    }
+
     if (sql.includes('SELECT * FROM bot_config')) {
       return this.data.bot_config[0] || {
         id: 1, bot_enabled: 1, only_mentioned: 0,
@@ -198,16 +203,13 @@ class MockDB {
       };
     }
 
-    if (sql.includes('SELECT qa.id, qa.answer, qa.category, qa.keywords')) {
-      const results = this.data.knowledge_answers
-        .filter(a => a.enabled === 1)
-        .map(a => ({
-          ...a,
-          questions: this.data.knowledge_questions
-            .filter(q => q.answer_id === a.id && q.enabled === 1)
-            .map(q => q.question)
-        }));
-      return { results };
+    if (sql.includes('SELECT id, answer, category, keywords FROM knowledge_answers')) {
+      return { results: this.data.knowledge_answers.filter(a => a.enabled === 1) };
+    }
+
+    if (sql.includes('SELECT question FROM knowledge_questions WHERE answer_id')) {
+      const [answerId] = params;
+      return { results: this.data.knowledge_questions.filter(q => q.answer_id === answerId && q.enabled === 1) };
     }
 
     if (sql.includes('SELECT * FROM unanswered')) {
@@ -349,18 +351,29 @@ const server = http.createServer(async (req, res) => {
     // 知识库接口
     if (path === '/manage/knowledge') {
       if (req.method === 'GET') {
-        const items = await env.DB.prepare(
-          'SELECT qa.id, qa.answer, qa.category, qa.keywords, GROUP_CONCAT(kq.question) as questions FROM knowledge_answers qa LEFT JOIN knowledge_questions kq ON qa.id = kq.answer_id WHERE qa.enabled = 1 GROUP BY qa.id'
+        // 使用与 worker.js 相同的查询方式
+        const answersResult = await env.DB.prepare(
+          'SELECT id, answer, category, keywords FROM knowledge_answers WHERE enabled = 1 ORDER BY id DESC'
         ).all();
 
-        const formatted = items.results.map(item => ({
-          ...item,
-          questions: item.questions ? item.questions.split(',') : []
-        }));
+        const items = [];
+        for (const answer of (answersResult.results || [])) {
+          const questionsResult = await env.DB.prepare(
+            'SELECT question FROM knowledge_questions WHERE answer_id = ? AND enabled = 1'
+          ).bind(answer.id).all();
+
+          items.push({
+            id: answer.id,
+            answer: answer.answer,
+            category: answer.category,
+            keywords: answer.keywords,
+            questions: (questionsResult.results || []).map(q => q.question)
+          });
+        }
 
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
-        res.end(JSON.stringify(formatted));
+        res.end(JSON.stringify(items));
         return;
       }
 
@@ -380,11 +393,20 @@ const server = http.createServer(async (req, res) => {
             }
 
             // 插入答案
-            const answerResult = await env.DB.prepare(
+            await env.DB.prepare(
               'INSERT INTO knowledge_answers (answer, category, keywords) VALUES (?, ?, ?)'
             ).bind(data.answer, data.category || '', data.keywords || '').run();
 
-            const answerId = answerResult.meta.last_row_id;
+            // 获取最后插入的 ID
+            const lastIdResult = await env.DB.prepare('SELECT last_insert_rowid() as id').first();
+            const answerId = lastIdResult?.id;
+
+            if (!answerId) {
+              res.setHeader('Content-Type', 'application/json');
+              res.writeHead(500);
+              res.end(JSON.stringify({ error: 'Failed to get answer ID' }));
+              return;
+            }
 
             // 插入问题变体
             for (const question of data.questions) {
