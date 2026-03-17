@@ -216,6 +216,25 @@ class MockDB {
       return { results: this.data.unanswered.filter(u => u.ai_classified === 1).reverse() };
     }
 
+    if (sql.includes('SELECT message, COUNT(*) as count, MAX(created_at) as lastAsked FROM unanswered')) {
+      const grouped = {};
+      this.data.unanswered.filter(u => u.ai_classified === 1).forEach(u => {
+        const key = u.message;
+        if (!grouped[key]) {
+          grouped[key] = { message: key, count: 0, lastAsked: u.created_at };
+        }
+        grouped[key].count++;
+        if (u.created_at > grouped[key].lastAsked) {
+          grouped[key].lastAsked = u.created_at;
+        }
+      });
+      return { results: Object.values(grouped).sort((a, b) => b.count - a.count).slice(0, 20) };
+    }
+
+    if (sql.includes('SELECT question FROM knowledge_questions WHERE enabled = 1')) {
+      return { results: this.data.knowledge_questions.filter(q => q.enabled === 1) };
+    }
+
     return { results: [] };
   }
 }
@@ -491,6 +510,35 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.writeHead(200);
       res.end(JSON.stringify(items.results || []));
+      return;
+    }
+
+    // 知识库缺口分析接口
+    if (path === '/manage/gap-analysis' && req.method === 'GET') {
+      const unanswered = await env.DB.prepare(
+        'SELECT message, COUNT(*) as count, MAX(created_at) as lastAsked FROM unanswered WHERE ai_classified = 1 GROUP BY message ORDER BY count DESC LIMIT 20'
+      ).all();
+      
+      const knowledge = await env.DB.prepare(
+        'SELECT question FROM knowledge_questions WHERE enabled = 1'
+      ).all();
+      
+      const existingQuestions = new Set(
+        (knowledge.results || []).map(k => k.question.toLowerCase())
+      );
+      
+      const gaps = (unanswered.results || [])
+        .filter(item => !existingQuestions.has(item.message.toLowerCase()))
+        .map(item => ({
+          message: item.message,
+          count: item.count,
+          lastAsked: item.lastAsked,
+          suggestion: '建议添加相关知识条目'
+        }));
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end(JSON.stringify({ gaps }));
       return;
     }
 

@@ -198,15 +198,44 @@ const INDEX_HTML = `<!DOCTYPE html>
                 <div class="flex justify-between items-center mb-4">
                     <input type="text" id="searchKb" placeholder="搜索知识库..."
                            class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-64">
-                    <button onclick="loadKnowledgeBase()" 
-                            class="inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 font-medium rounded-md hover:bg-gray-200">
-                        <i class="fas fa-sync-alt mr-2"></i>刷新
-                    </button>
+                    <div class="flex space-x-2">
+                        <button onclick="exportKnowledge()" 
+                                class="inline-flex items-center px-3 py-2 bg-green-100 text-green-700 font-medium rounded-md hover:bg-green-200">
+                            <i class="fas fa-download mr-2"></i>导出
+                        </button>
+                        <label class="inline-flex items-center px-3 py-2 bg-purple-100 text-purple-700 font-medium rounded-md hover:bg-purple-200 cursor-pointer">
+                            <i class="fas fa-upload mr-2"></i>导入
+                            <input type="file" id="importFile" accept=".json,.csv" class="hidden" onchange="importKnowledge(event)">
+                        </label>
+                        <button onclick="loadKnowledgeBase()" 
+                                class="inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 font-medium rounded-md hover:bg-gray-200">
+                            <i class="fas fa-sync-alt mr-2"></i>刷新
+                        </button>
+                    </div>
                 </div>
                 <div id="kbList" class="space-y-3 max-h-96 overflow-y-auto">
                     <div class="text-center py-8 text-gray-500">
                         <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
                         <p>加载中...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 知识库缺口分析 -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-gray-700">
+                        <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>知识库缺口分析
+                    </h2>
+                    <button onclick="analyzeGaps()" 
+                            class="inline-flex items-center px-3 py-2 bg-yellow-100 text-yellow-700 font-medium rounded-md hover:bg-yellow-200">
+                        <i class="fas fa-search mr-2"></i>分析
+                    </button>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">分析未回答问题，发现知识库缺失的内容</p>
+                <div id="gapAnalysis" class="space-y-3">
+                    <div class="text-center py-4 text-gray-500">
+                        <p>点击"分析"按钮开始</p>
                     </div>
                 </div>
             </div>
@@ -450,6 +479,132 @@ const INDEX_HTML = `<!DOCTYPE html>
             alert('请手动复制问题到知识库表单中添加');
         }
 
+        // 导出知识库
+        async function exportKnowledge() {
+            try {
+                const res = await fetch(API_BASE_URL + '/manage/knowledge');
+                const items = await res.json();
+                
+                const exportData = {
+                    version: '4.6',
+                    exportDate: new Date().toISOString(),
+                    items: items
+                };
+                
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'knowledge-base-' + new Date().toISOString().split('T')[0] + '.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('导出失败：' + e.message);
+            }
+        }
+
+        // 导入知识库
+        async function importKnowledge(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            try {
+                const text = await file.text();
+                let items = [];
+                
+                if (file.name.endsWith('.json')) {
+                    const data = JSON.parse(text);
+                    items = data.items || data;
+                } else if (file.name.endsWith('.csv')) {
+                    const lines = text.split('\\n').filter(l => l.trim());
+                    for (let i = 1; i < lines.length; i++) {
+                        const parts = lines[i].split(',');
+                        if (parts.length >= 2) {
+                            items.push({
+                                answer: parts[0].replace(/"/g, ''),
+                                questions: parts[1].split('|').map(q => q.replace(/"/g, '').trim()).filter(q => q),
+                                category: parts[2]?.replace(/"/g, '') || '',
+                                keywords: parts[3]?.replace(/"/g, '') || ''
+                            });
+                        }
+                    }
+                }
+                
+                if (items.length === 0) {
+                    alert('没有找到有效的知识库数据');
+                    return;
+                }
+                
+                if (!confirm('将导入 ' + items.length + ' 条知识，是否继续？')) return;
+                
+                let success = 0, failed = 0;
+                for (const item of items) {
+                    try {
+                        const res = await fetch(API_BASE_URL + '/manage/knowledge', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(item)
+                        });
+                        if (res.ok) success++;
+                        else failed++;
+                    } catch (e) {
+                        failed++;
+                    }
+                }
+                
+                alert('导入完成！成功：' + success + '，失败：' + failed);
+                loadKnowledgeBase();
+                loadStats();
+            } catch (e) {
+                alert('导入失败：' + e.message);
+            }
+            
+            event.target.value = '';
+        }
+
+        // 知识库缺口分析
+        async function analyzeGaps() {
+            const container = document.getElementById('gapAnalysis');
+            container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-xl"></i><p>分析中...</p></div>';
+            
+            try {
+                const res = await fetch(API_BASE_URL + '/manage/gap-analysis');
+                const data = await res.json();
+                
+                if (data.gaps.length === 0) {
+                    container.innerHTML = '<div class="text-center py-4 text-green-600"><i class="fas fa-check-circle text-xl"></i><p>知识库覆盖良好，暂无明显缺口</p></div>';
+                    return;
+                }
+                
+                container.innerHTML = data.gaps.map(gap => {
+                    return '<div class="border border-yellow-200 bg-yellow-50 rounded-lg p-4">' +
+                        '<div class="flex justify-between items-start">' +
+                            '<div class="flex-1">' +
+                                '<div class="font-medium text-gray-900 mb-1">' + escapeHtml(gap.message) + '</div>' +
+                                '<div class="text-sm text-gray-500">' +
+                                    '<span class="mr-3">出现 ' + gap.count + ' 次</span>' +
+                                    '<span>最近: ' + new Date(gap.lastAsked).toLocaleDateString('zh-CN') + '</span>' +
+                                '</div>' +
+                                '<div class="text-sm text-yellow-700 mt-1">建议添加: ' + escapeHtml(gap.suggestion) + '</div>' +
+                            '</div>' +
+                            '<button onclick="quickAddKnowledge(\\'' + escapeHtml(gap.message.replace(/'/g, "\\\\'")) + '\\')" class="ml-4 text-blue-500 hover:text-blue-700">' +
+                                '<i class="fas fa-plus mr-1"></i>快速添加' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            } catch (e) {
+                container.innerHTML = '<div class="text-center py-4 text-red-500">分析失败：' + e.message + '</div>';
+            }
+        }
+
+        // 快速添加知识
+        function quickAddKnowledge(question) {
+            document.getElementById('answer').focus();
+            document.getElementById('questions').value = question;
+            document.getElementById('answer').scrollIntoView({ behavior: 'smooth' });
+        }
+
         window.onload = () => {
             loadStats();
             loadConfig();
@@ -512,6 +667,10 @@ async function handleRequest(request, env) {
   
   if (request.method === 'GET' && path === '/manage/unanswered') {
     return await getUnanswered(env);
+  }
+  
+  if (request.method === 'GET' && path === '/manage/gap-analysis') {
+    return await analyzeGaps(env);
   }
   
   if (request.method === 'GET' && path === '/') {
@@ -1047,6 +1206,51 @@ async function getUnanswered(env) {
   } catch (error) {
     return jsonResponse([]);
   }
+}
+
+async function analyzeGaps(env) {
+  try {
+    const unanswered = await env.DB.prepare(
+      'SELECT message, COUNT(*) as count, MAX(created_at) as lastAsked FROM unanswered WHERE ai_classified = 1 GROUP BY message ORDER BY count DESC LIMIT 20'
+    ).all();
+    
+    const knowledge = await env.DB.prepare(
+      'SELECT question FROM knowledge_questions WHERE enabled = 1'
+    ).all();
+    
+    const existingQuestions = new Set(
+      (knowledge.results || []).map(k => k.question.toLowerCase())
+    );
+    
+    const gaps = (unanswered.results || [])
+      .filter(item => !existingQuestions.has(item.message.toLowerCase()))
+      .map(item => ({
+        message: item.message,
+        count: item.count,
+        lastAsked: item.lastAsked,
+        suggestion: generateSuggestion(item.message)
+      }));
+    
+    return jsonResponse({ gaps });
+  } catch (error) {
+    return jsonResponse({ gaps: [], error: error.message });
+  }
+}
+
+function generateSuggestion(message) {
+  if (message.includes('价格') || message.includes('多少钱') || message.includes('收费')) {
+    return '添加价格相关的知识条目';
+  }
+  if (message.includes('客服') || message.includes('联系') || message.includes('电话')) {
+    return '添加联系方式相关的知识条目';
+  }
+  if (message.includes('怎么') || message.includes('如何')) {
+    return '添加操作指南相关的知识条目';
+  }
+  if (message.includes('时间') || message.includes('什么时候')) {
+    return '添加时间相关的知识条目';
+  }
+  return '建议添加相关知识条目';
 }
 
 export default {
