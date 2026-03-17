@@ -1,12 +1,12 @@
-// Cloudflare Worker - Telegram 智能知识库机器人 v4.0
-// 功能：轻量级AI分类 + 知识库检索，零额度浪费
+// Cloudflare Worker - Telegram 智能知识库机器人 v4.5
+// 功能：轻量级AI意图识别 + 知识库检索，精准且省额度
 
 const INDEX_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>知识库机器人管理 v4.0</title>
+    <title>知识库机器人管理 v4.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -17,13 +17,13 @@ const INDEX_HTML = `<!DOCTYPE html>
             <header class="mb-8 flex justify-between items-center">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-800 mb-2">
-                        <i class="fas fa-book text-indigo-500 mr-3"></i>
+                        <i class="fas fa-brain text-indigo-500 mr-3"></i>
                         Telegram 智能知识库机器人
                     </h1>
-                    <p class="text-gray-600">轻量级AI分类 + 知识库检索，精准回答</p>
+                    <p class="text-gray-600">AI意图识别 + 知识库检索，精准省额度</p>
                 </div>
                 <div class="text-right">
-                    <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">v4.0</span>
+                    <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">v4.5</span>
                 </div>
             </header>
 
@@ -54,11 +54,11 @@ const INDEX_HTML = `<!DOCTYPE html>
                 <div class="bg-white rounded-lg shadow p-4">
                     <div class="flex items-center">
                         <div class="p-3 rounded-full bg-blue-100 text-blue-500">
-                            <i class="fas fa-comments text-xl"></i>
+                            <i class="fas fa-robot text-xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm text-gray-500">总消息</p>
-                            <p class="text-2xl font-bold" id="totalMessages">-</p>
+                            <p class="text-sm text-gray-500">AI识别次数</p>
+                            <p class="text-2xl font-bold" id="aiCalls">-</p>
                         </div>
                     </div>
                 </div>
@@ -102,18 +102,20 @@ const INDEX_HTML = `<!DOCTYPE html>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
+                            <label class="flex items-center space-x-2 mb-2">
+                                <input type="checkbox" id="useAIClassifier" checked
+                                       class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                <span class="text-sm font-medium text-gray-700">使用AI意图识别（推荐）</span>
+                            </label>
+                            <p class="text-xs text-gray-500">开启后先用AI判断是否需要回答，大幅减少误触发</p>
+                        </div>
+                        <div>
                             <label for="similarityThreshold" class="block text-sm font-medium text-gray-700 mb-1">
                                 匹配相似度阈值: <span id="thresholdValue">0.6</span>
                             </label>
                             <input type="range" id="similarityThreshold" min="0.3" max="0.95" step="0.05" value="0.6"
                                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                            <p class="text-xs text-gray-500 mt-1">0.3=宽松（容易匹配），0.95=严格（必须很相似）</p>
-                        </div>
-                        <div>
-                            <label for="maxResults" class="block text-sm font-medium text-gray-700 mb-1">最多返回几个答案</label>
-                            <input type="number" id="maxResults" value="1" min="1" max="3"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <p class="text-xs text-gray-500 mt-1">超过1个时会列出多个相关答案</p>
+                            <p class="text-xs text-gray-500 mt-1">0.3=宽松，0.95=严格</p>
                         </div>
                     </div>
                     <button type="submit" 
@@ -129,7 +131,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                     <i class="fas fa-book text-blue-500 mr-2"></i>
                     知识库管理
                 </h2>
-                <p class="text-sm text-gray-600 mb-4">添加常见问题和答案，机器人会智能匹配相似问题</p>
+                <p class="text-sm text-gray-600 mb-4">添加常见问题和答案，AI会判断用户是否在问这些问题</p>
                 
                 <form id="kbForm" class="space-y-4 mb-6">
                     <input type="hidden" id="editId" value="">
@@ -200,7 +202,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                         <i class="fas fa-sync-alt mr-2"></i>刷新
                     </button>
                 </div>
-                <p class="text-sm text-gray-600 mb-4">这些问题没有匹配到知识库答案，可以考虑添加</p>
+                <p class="text-sm text-gray-600 mb-4">AI判断为需要回答但没匹配到知识库的问题</p>
                 <div id="unansweredList" class="space-y-3 max-h-96 overflow-y-auto">
                     <div class="text-center py-8 text-gray-500">
                         <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
@@ -221,7 +223,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                 const stats = await res.json();
                 document.getElementById('kbCount').textContent = stats.kbCount || 0;
                 document.getElementById('todayAnswers').textContent = stats.todayAnswers || 0;
-                document.getElementById('totalMessages').textContent = stats.totalMessages || 0;
+                document.getElementById('aiCalls').textContent = stats.aiCalls || 0;
                 document.getElementById('aiUsage').textContent = (stats.aiUsage || 0) + ' neurons';
             } catch (e) {
                 console.error('加载统计失败:', e);
@@ -234,10 +236,10 @@ const INDEX_HTML = `<!DOCTYPE html>
                 const res = await fetch(API_BASE_URL + '/manage/config');
                 const config = await res.json();
                 document.getElementById('botEnabled').checked = config.botEnabled !== false;
-                document.getElementById('onlyMentioned').checked = config.onlyMentioned !== false;
+                document.getElementById('onlyMentioned').checked = config.onlyMentioned === true;
+                document.getElementById('useAIClassifier').checked = config.useAIClassifier !== false;
                 document.getElementById('similarityThreshold').value = config.similarityThreshold || 0.6;
                 document.getElementById('thresholdValue').textContent = config.similarityThreshold || 0.6;
-                document.getElementById('maxResults').value = config.maxResults || 1;
             } catch (e) {
                 console.error('加载配置失败:', e);
             }
@@ -254,8 +256,8 @@ const INDEX_HTML = `<!DOCTYPE html>
             const config = {
                 botEnabled: document.getElementById('botEnabled').checked,
                 onlyMentioned: document.getElementById('onlyMentioned').checked,
-                similarityThreshold: parseFloat(document.getElementById('similarityThreshold').value),
-                maxResults: parseInt(document.getElementById('maxResults').value)
+                useAIClassifier: document.getElementById('useAIClassifier').checked,
+                similarityThreshold: parseFloat(document.getElementById('similarityThreshold').value)
             };
             
             try {
@@ -421,7 +423,6 @@ const INDEX_HTML = `<!DOCTYPE html>
         }
 
         async function addFromUnanswered(id) {
-            // 简化实现，实际应该填充表单
             alert('请手动复制问题到知识库表单中添加');
         }
 
@@ -504,7 +505,7 @@ async function handleRequest(request, env) {
     });
   }
   
-  return new Response('Telegram Knowledge Bot v4.0 is running!', { status: 200 });
+  return new Response('Telegram Knowledge Bot v4.5 is running!', { status: 200 });
 }
 
 function handleCORS() {
@@ -535,15 +536,15 @@ async function getConfig(env) {
       configCache = {
         botEnabled: config.bot_enabled === 1,
         onlyMentioned: config.only_mentioned === 1,
-        similarityThreshold: config.similarity_threshold || 0.6,
-        maxResults: config.max_results || 1
+        useAIClassifier: config.use_ai_classifier !== 0,
+        similarityThreshold: config.similarity_threshold || 0.6
       };
     } else {
       configCache = {
         botEnabled: true,
         onlyMentioned: false,
-        similarityThreshold: 0.6,
-        maxResults: 1
+        useAIClassifier: true,
+        similarityThreshold: 0.6
       };
     }
     return jsonResponse(configCache);
@@ -551,8 +552,8 @@ async function getConfig(env) {
     return jsonResponse({
       botEnabled: true,
       onlyMentioned: false,
-      similarityThreshold: 0.6,
-      maxResults: 1
+      useAIClassifier: true,
+      similarityThreshold: 0.6
     });
   }
 }
@@ -561,19 +562,19 @@ async function getConfig(env) {
 async function saveConfig(request, env) {
   try {
     const body = await request.json();
-    const { botEnabled, onlyMentioned, similarityThreshold, maxResults } = body;
+    const { botEnabled, onlyMentioned, useAIClassifier, similarityThreshold } = body;
     
     await env.DB.prepare(
-      'INSERT OR REPLACE INTO bot_config (id, bot_enabled, only_mentioned, similarity_threshold, max_results, updated_at) VALUES (1, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, similarity_threshold, updated_at) VALUES (1, ?, ?, ?, ?, ?)'
     ).bind(
       botEnabled ? 1 : 0,
       onlyMentioned ? 1 : 0,
+      useAIClassifier ? 1 : 0,
       similarityThreshold,
-      maxResults,
       new Date().toISOString()
     ).run();
     
-    configCache = { botEnabled, onlyMentioned, similarityThreshold, maxResults };
+    configCache = { botEnabled, onlyMentioned, useAIClassifier, similarityThreshold };
     return jsonResponse({ success: true });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
@@ -585,8 +586,6 @@ async function handleTelegramWebhook(request, env) {
   try {
     const update = await request.json();
     
-    console.log('Webhook received:', JSON.stringify(update));
-    
     if (!update.message) {
       return new Response('OK', { status: 200 });
     }
@@ -597,8 +596,6 @@ async function handleTelegramWebhook(request, env) {
     const messageText = message.text || '';
     const userId = message.from.id;
     const userName = message.from.username || message.from.first_name || 'Unknown';
-    
-    console.log('Processing message:', messageText, 'from:', userName);
     
     if (!messageText.trim()) {
       return new Response('OK', { status: 200 });
@@ -632,23 +629,34 @@ async function handleTelegramWebhook(request, env) {
     // 清理消息文本
     let cleanText = messageText.replace(new RegExp('@' + botUsername, 'g'), '').trim();
     
-    // 在知识库中搜索最匹配的问题
-    const matches = await findBestMatches(env, cleanText, configCache.maxResults || 1);
+    // 步骤1：使用AI判断用户是否在问知识库相关问题
+    let shouldAnswer = false;
     
-    console.log('Matches found:', matches.length, 'best similarity:', matches[0]?.similarity);
+    if (configCache.useAIClassifier !== false) {
+      // 使用AI分类器
+      const classification = await classifyIntent(env, cleanText);
+      shouldAnswer = classification.shouldAnswer;
+      
+      // 记录AI调用
+      await env.DB.prepare(
+        'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(chatId, userId, cleanText, classification.intent, classification.confidence, new Date().toISOString()).run();
+    } else {
+      // 不使用AI，直接尝试匹配
+      shouldAnswer = true;
+    }
+    
+    if (!shouldAnswer) {
+      // AI判断不需要回答，直接返回
+      return new Response('OK', { status: 200 });
+    }
+    
+    // 步骤2：在知识库中搜索最匹配的问题
+    const matches = await findBestMatches(env, cleanText, 1);
     
     if (matches.length > 0 && matches[0].similarity >= (configCache.similarityThreshold || 0.6)) {
       // 找到匹配答案
-      let responseText;
-      if (matches.length === 1) {
-        responseText = matches[0].answer;
-      } else {
-        // 多个匹配结果
-        responseText = '找到以下相关答案：\n\n';
-        matches.forEach((match, index) => {
-          responseText += (index + 1) + '. ' + match.question + '\n' + match.answer + '\n\n';
-        });
-      }
+      const responseText = matches[0].answer;
       
       await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
       await recordAnswer(env, chatId, userId, userName, cleanText, responseText, matches[0].similarity);
@@ -660,7 +668,7 @@ async function handleTelegramWebhook(request, env) {
     } else {
       // 未找到匹配，记录到未回答问题
       await env.DB.prepare(
-        'INSERT INTO unanswered (chat_id, user_id, user_name, message, chat_type, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO unanswered (chat_id, user_id, user_name, message, chat_type, ai_classified, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)'
       ).bind(chatId, userId, userName, cleanText, chatType, new Date().toISOString()).run();
     }
     
@@ -671,17 +679,53 @@ async function handleTelegramWebhook(request, env) {
   }
 }
 
+// AI意图分类 - 使用轻量级模型
+async function classifyIntent(env, message) {
+  try {
+    // 获取所有知识库问题作为上下文
+    const knowledgeBase = await env.DB.prepare('SELECT question, category FROM knowledge_base WHERE enabled = 1').all();
+    const sampleQuestions = knowledgeBase.results.slice(0, 10).map(k => k.question).join('\n');
+    
+    const systemPrompt = `你是一个意图分类器。判断用户消息是否在询问以下类型的问题：
+${sampleQuestions}
+
+如果用户在问以上类似的问题，回复：ANSWER
+如果用户在闲聊、打招呼或问无关问题，回复：IGNORE
+只回复一个单词：ANSWER 或 IGNORE`;
+
+    const response = await env.AI.run('@cf/meta/llama-3.2-1b-instruct', {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message }
+      ],
+      temperature: 0.1,
+      max_tokens: 10
+    });
+    
+    const result = response.response?.trim().toUpperCase() || 'IGNORE';
+    const shouldAnswer = result.includes('ANSWER');
+    
+    return {
+      shouldAnswer,
+      intent: shouldAnswer ? 'question' : 'ignore',
+      confidence: shouldAnswer ? 0.9 : 0.1
+    };
+  } catch (error) {
+    console.error('AI classification error:', error);
+    // AI失败时默认尝试回答
+    return { shouldAnswer: true, intent: 'unknown', confidence: 0.5 };
+  }
+}
+
 // 在知识库中查找最佳匹配
 async function findBestMatches(env, query, maxResults = 1) {
   try {
-    // 获取所有知识库条目
     const allKnowledge = await env.DB.prepare('SELECT * FROM knowledge_base WHERE enabled = 1').all();
     
     if (!allKnowledge.results || allKnowledge.results.length === 0) {
       return [];
     }
     
-    // 计算相似度并排序
     const scored = allKnowledge.results.map(item => {
       const similarity = calculateSimilarity(query, item.question, item.keywords);
       return { ...item, similarity };
@@ -696,20 +740,17 @@ async function findBestMatches(env, query, maxResults = 1) {
   }
 }
 
-// 计算相似度（简化版，使用关键词匹配 + 编辑距离）
+// 计算相似度
 function calculateSimilarity(query, question, keywords) {
   const queryLower = query.toLowerCase();
   const questionLower = question.toLowerCase();
   
-  // 1. 精确匹配
   if (queryLower === questionLower) return 1.0;
   
-  // 2. 包含匹配
   if (questionLower.includes(queryLower) || queryLower.includes(questionLower)) {
     return 0.9;
   }
   
-  // 3. 关键词匹配
   if (keywords) {
     const keywordList = keywords.toLowerCase().split(',').map(k => k.trim());
     for (const keyword of keywordList) {
@@ -719,7 +760,6 @@ function calculateSimilarity(query, question, keywords) {
     }
   }
   
-  // 4. 计算编辑距离相似度
   const distance = levenshteinDistance(queryLower, questionLower);
   const maxLen = Math.max(queryLower.length, questionLower.length);
   const similarity = 1 - (distance / maxLen);
@@ -795,17 +835,20 @@ async function getStats(env) {
     const kbResult = await env.DB.prepare('SELECT COUNT(*) as count FROM knowledge_base WHERE enabled = 1').first();
     const today = new Date().toISOString().split('T')[0];
     const todayResult = await env.DB.prepare('SELECT answers_today FROM bot_stats WHERE date = ?').bind(today).first();
-    const totalResult = await env.DB.prepare('SELECT SUM(total_answers) as count FROM bot_stats').first();
-    const messagesResult = await env.DB.prepare('SELECT COUNT(*) as count FROM messages').first();
+    const aiCallsResult = await env.DB.prepare('SELECT COUNT(*) as count FROM ai_calls WHERE DATE(created_at) = ?').bind(today).first();
+    const totalAiCalls = await env.DB.prepare('SELECT COUNT(*) as count FROM ai_calls').first();
+    
+    // 估算AI消耗 (Llama 3.2 1B 每次约15 neurons)
+    const aiUsage = (totalAiCalls?.count || 0) * 15;
     
     return jsonResponse({
       kbCount: kbResult?.count || 0,
       todayAnswers: todayResult?.answers_today || 0,
-      totalMessages: messagesResult?.count || 0,
-      aiUsage: 0 // 本版本不使用AI，纯知识库匹配
+      aiCalls: aiCallsResult?.count || 0,
+      aiUsage: aiUsage
     });
   } catch (error) {
-    return jsonResponse({ kbCount: 0, todayAnswers: 0, totalMessages: 0, aiUsage: 0 });
+    return jsonResponse({ kbCount: 0, todayAnswers: 0, aiCalls: 0, aiUsage: 0 });
   }
 }
 
@@ -879,7 +922,7 @@ async function deleteKnowledge(id, env) {
 async function getUnanswered(env) {
   try {
     const items = await env.DB.prepare(
-      'SELECT * FROM unanswered ORDER BY created_at DESC LIMIT 50'
+      'SELECT * FROM unanswered WHERE ai_classified = 1 ORDER BY created_at DESC LIMIT 50'
     ).all();
     return jsonResponse(items.results || []);
   } catch (error) {
