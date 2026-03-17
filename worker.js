@@ -584,15 +584,14 @@ async function saveConfig(request, env) {
     const { botEnabled, onlyMentioned, useAIClassifier, useAIAnswer, similarityThreshold, maxContextItems } = body;
     
     await env.DB.prepare(
-      'INSERT OR REPLACE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items) VALUES (1, ?, ?, ?, ?, ?, ?)'
     ).bind(
       botEnabled ? 1 : 0,
       onlyMentioned ? 1 : 0,
       useAIClassifier ? 1 : 0,
       useAIAnswer ? 1 : 0,
       similarityThreshold,
-      maxContextItems,
-      new Date().toISOString()
+      maxContextItems
     ).run();
     
     configCache = { botEnabled, onlyMentioned, useAIClassifier, useAIAnswer, similarityThreshold, maxContextItems };
@@ -622,8 +621,8 @@ async function handleTelegramWebhook(request, env) {
     }
     
     await env.DB.prepare(
-      'INSERT INTO messages (chat_id, user_id, user_name, message, chat_type, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(chatId, userId, userName, messageText, chatType, new Date().toISOString()).run();
+      'INSERT INTO messages (chat_id, user_id, user_name, message, chat_type) VALUES (?, ?, ?, ?, ?)'
+    ).bind(chatId, userId, userName, messageText, chatType).run();
     
     if (!configCache) {
       await getConfig(env);
@@ -651,8 +650,8 @@ async function handleTelegramWebhook(request, env) {
       shouldAnswer = classification.shouldAnswer;
       
       await env.DB.prepare(
-        'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(chatId, userId, cleanText, classification.intent, classification.confidence, new Date().toISOString()).run();
+        'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence) VALUES (?, ?, ?, ?, ?)'
+      ).bind(chatId, userId, cleanText, classification.intent, classification.confidence).run();
     } else {
       shouldAnswer = true;
     }
@@ -681,13 +680,14 @@ async function handleTelegramWebhook(request, env) {
       await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
       await recordAnswer(env, chatId, userId, userName, cleanText, responseText, answerType, matches[0].similarity);
       
+      const today = new Date().toISOString().split('T')[0];
       await env.DB.prepare(
         'UPDATE bot_stats SET answers_today = answers_today + 1, total_answers = total_answers + 1 WHERE date = ?'
-      ).bind(new Date().toISOString().split('T')[0]).run();
+      ).bind(today).run();
     } else {
       await env.DB.prepare(
-        'INSERT INTO unanswered (chat_id, user_id, user_name, message, chat_type, ai_classified, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)'
-      ).bind(chatId, userId, userName, cleanText, chatType, new Date().toISOString()).run();
+        'INSERT INTO unanswered (chat_id, user_id, user_name, message, chat_type, ai_classified) VALUES (?, ?, ?, ?, ?, 1)'
+      ).bind(chatId, userId, userName, cleanText, chatType).run();
     }
     
     return new Response('OK', { status: 200 });
@@ -887,8 +887,8 @@ async function sendTelegramMessage(botToken, chatId, text, replyToMessageId) {
 async function recordAnswer(env, chatId, userId, userName, question, answer, answerType, similarity) {
   try {
     await env.DB.prepare(
-      'INSERT INTO answers (chat_id, user_id, user_name, question, answer, answer_type, similarity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(chatId, userId, userName, question, answer, answerType, similarity, new Date().toISOString()).run();
+      'INSERT INTO answers (chat_id, user_id, user_name, question, answer, answer_type, similarity) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(chatId, userId, userName, question, answer, answerType, similarity).run();
   } catch (e) {
     console.error('Record answer error:', e);
   }
@@ -963,19 +963,19 @@ async function addKnowledge(request, env) {
       return jsonResponse({ error: 'answer and questions are required' }, 400);
     }
     
-    // 插入答案
+    // 插入答案 - 使用数据库默认时间戳
     const answerResult = await env.DB.prepare(
-      'INSERT INTO knowledge_answers (answer, category, keywords, created_at) VALUES (?, ?, ?, ?)'
-    ).bind(answer, category || '', keywords || '', new Date().toISOString()).run();
+      'INSERT INTO knowledge_answers (answer, category, keywords) VALUES (?, ?, ?)'
+    ).bind(answer, category || '', keywords || '').run();
     
     const answerId = answerResult.meta.last_row_id;
     
-    // 插入问题变体
+    // 插入问题变体 - 使用数据库默认时间戳
     for (const question of questions) {
       if (question.trim()) {
         await env.DB.prepare(
-          'INSERT INTO knowledge_questions (answer_id, question, keywords, created_at) VALUES (?, ?, ?, ?)'
-        ).bind(answerId, question.trim(), keywords || '', new Date().toISOString()).run();
+          'INSERT INTO knowledge_questions (answer_id, question, keywords) VALUES (?, ?, ?)'
+        ).bind(answerId, question.trim(), keywords || '').run();
       }
     }
     
@@ -998,12 +998,12 @@ async function updateKnowledge(id, request, env) {
     // 删除旧问题
     await env.DB.prepare('DELETE FROM knowledge_questions WHERE answer_id = ?').bind(id).run();
     
-    // 插入新问题
+    // 插入新问题 - 使用数据库默认时间戳
     for (const question of questions) {
       if (question.trim()) {
         await env.DB.prepare(
-          'INSERT INTO knowledge_questions (answer_id, question, keywords, created_at) VALUES (?, ?, ?, ?)'
-        ).bind(id, question.trim(), keywords, new Date().toISOString()).run();
+          'INSERT INTO knowledge_questions (answer_id, question, keywords) VALUES (?, ?, ?)'
+        ).bind(id, question.trim(), keywords || '').run();
       }
     }
     
