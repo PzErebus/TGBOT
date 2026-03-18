@@ -118,7 +118,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                             <p class="text-xs text-gray-500">AI学习知识库后生成回答，更智能</p>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label for="similarityThreshold" class="block text-sm font-medium text-gray-700 mb-1">
                                 匹配相似度阈值: <span id="thresholdValue">0.6</span>
@@ -134,6 +134,14 @@ const INDEX_HTML = `<!DOCTYPE html>
                             <input type="range" id="maxContextItems" min="1" max="10" step="1" value="5"
                                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
                             <p class="text-xs text-gray-500 mt-1">AI回答时参考的知识库条目数</p>
+                        </div>
+                        <div>
+                            <label for="aiDailyLimit" class="block text-sm font-medium text-gray-700 mb-1">
+                                AI每日限额: <span id="aiLimitValue">100</span>
+                            </label>
+                            <input type="range" id="aiDailyLimit" min="10" max="500" step="10" value="100"
+                                   class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <p class="text-xs text-gray-500 mt-1">免费套餐建议100-200次/天</p>
                         </div>
                     </div>
                     <button type="submit" 
@@ -221,6 +229,81 @@ const INDEX_HTML = `<!DOCTYPE html>
                 </div>
             </div>
 
+            <!-- 前言内容管理 -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">
+                    <i class="fas fa-book-open text-teal-500 mr-2"></i>
+                    前言/背景知识管理
+                </h2>
+                <p class="text-sm text-gray-600 mb-4">AI回答时会参考这些内容作为背景知识</p>
+                
+                <form id="contextForm" class="space-y-4 mb-6">
+                    <input type="hidden" id="editContextId" value="">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="contextTitle" class="block text-sm font-medium text-gray-700 mb-1">标题 *</label>
+                            <input type="text" id="contextTitle" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                   placeholder="如：公司介绍、产品说明..." required>
+                        </div>
+                        <div>
+                            <label for="contextCategory" class="block text-sm font-medium text-gray-700 mb-1">分类</label>
+                            <input type="text" id="contextCategory" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                   placeholder="如：通用、产品、服务...">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="contextContent" class="block text-sm font-medium text-gray-700 mb-1">内容 *</label>
+                        <textarea id="contextContent" rows="4"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                  placeholder="输入背景知识内容，AI回答时会参考这些信息..." required></textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="contextPriority" class="block text-sm font-medium text-gray-700 mb-1">
+                                优先级: <span id="contextPriorityValue">0</span>
+                            </label>
+                            <input type="range" id="contextPriority" min="0" max="10" step="1" value="0"
+                                   class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <p class="text-xs text-gray-500 mt-1">数字越大优先级越高</p>
+                        </div>
+                        <div class="flex items-center">
+                            <label class="flex items-center space-x-2 mt-6">
+                                <input type="checkbox" id="contextEnabled" checked
+                                       class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded">
+                                <span class="text-sm font-medium text-gray-700">启用</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button type="submit" 
+                                class="inline-flex items-center px-4 py-2 bg-teal-600 text-white font-medium rounded-md hover:bg-teal-700">
+                            <i class="fas fa-save mr-2"></i>保存
+                        </button>
+                        <button type="button" onclick="resetContextForm()" 
+                                class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-md hover:bg-gray-300">
+                            <i class="fas fa-times mr-2"></i>取消
+                        </button>
+                    </div>
+                </form>
+
+                <!-- 前言内容列表 -->
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium text-gray-700">已有内容</h3>
+                    <button onclick="loadContextList()" 
+                            class="inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 font-medium rounded-md hover:bg-gray-200">
+                        <i class="fas fa-sync-alt mr-2"></i>刷新
+                    </button>
+                </div>
+                <div id="contextList" class="space-y-3 max-h-80 overflow-y-auto">
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                        <p>加载中...</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- 知识库缺口分析 -->
             <div class="bg-white rounded-lg shadow-md p-6 mb-8">
                 <div class="flex justify-between items-center mb-4">
@@ -290,6 +373,8 @@ const INDEX_HTML = `<!DOCTYPE html>
                 document.getElementById('thresholdValue').textContent = config.similarityThreshold || 0.6;
                 document.getElementById('maxContextItems').value = config.maxContextItems || 5;
                 document.getElementById('contextValue').textContent = config.maxContextItems || 5;
+                document.getElementById('aiDailyLimit').value = config.aiDailyLimit || 100;
+                document.getElementById('aiLimitValue').textContent = config.aiDailyLimit || 100;
             } catch (e) {
                 console.error('加载配置失败:', e);
             }
@@ -303,6 +388,10 @@ const INDEX_HTML = `<!DOCTYPE html>
             document.getElementById('contextValue').textContent = e.target.value;
         });
 
+        document.getElementById('aiDailyLimit').addEventListener('input', (e) => {
+            document.getElementById('aiLimitValue').textContent = e.target.value;
+        });
+
         document.getElementById('configForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const config = {
@@ -311,7 +400,8 @@ const INDEX_HTML = `<!DOCTYPE html>
                 useAIClassifier: document.getElementById('useAIClassifier').checked,
                 useAIAnswer: document.getElementById('useAIAnswer').checked,
                 similarityThreshold: parseFloat(document.getElementById('similarityThreshold').value),
-                maxContextItems: parseInt(document.getElementById('maxContextItems').value)
+                maxContextItems: parseInt(document.getElementById('maxContextItems').value),
+                aiDailyLimit: parseInt(document.getElementById('aiDailyLimit').value)
             };
             
             try {
@@ -466,7 +556,7 @@ const INDEX_HTML = `<!DOCTYPE html>
                 return '<div class="border border-gray-200 rounded-lg p-4 flex justify-between items-center">' +
                     '<div>' +
                         '<div class="font-medium text-gray-900">' + escapeHtml(item.message) + '</div>' +
-                        '<div class="text-sm text-gray-500">' + new Date(item.created_at).toLocaleString('zh-CN') + '</div>' +
+                        '<div class="text-sm text-gray-500">' + new Date(item.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) + '</div>' +
                     '</div>' +
                     '<button onclick="addFromUnanswered(' + item.id + ')" class="text-blue-500 hover:text-blue-700">' +
                         '<i class="fas fa-plus mr-1"></i>添加到知识库' +
@@ -605,11 +695,123 @@ const INDEX_HTML = `<!DOCTYPE html>
             document.getElementById('answer').scrollIntoView({ behavior: 'smooth' });
         }
 
+        // 前言内容管理
+        document.getElementById('contextPriority').addEventListener('input', (e) => {
+            document.getElementById('contextPriorityValue').textContent = e.target.value;
+        });
+
+        document.getElementById('contextForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const editId = document.getElementById('editContextId').value;
+            const data = {
+                title: document.getElementById('contextTitle').value,
+                content: document.getElementById('contextContent').value,
+                category: document.getElementById('contextCategory').value,
+                priority: parseInt(document.getElementById('contextPriority').value),
+                enabled: document.getElementById('contextEnabled').checked
+            };
+            
+            try {
+                const url = editId ? API_BASE_URL + '/manage/context/' + editId : API_BASE_URL + '/manage/context';
+                const method = editId ? 'PUT' : 'POST';
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) {
+                    alert(editId ? '更新成功！' : '添加成功！');
+                    resetContextForm();
+                    loadContextList();
+                } else {
+                    alert('保存失败');
+                }
+            } catch (e) {
+                alert('保存失败：' + e.message);
+            }
+        });
+
+        async function loadContextList() {
+            try {
+                const res = await fetch(API_BASE_URL + '/manage/context');
+                const items = await res.json();
+                const container = document.getElementById('contextList');
+                
+                if (items.length === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-gray-500">暂无内容，请添加</div>';
+                    return;
+                }
+                
+                container.innerHTML = items.map(item => {
+                    return '<div class="border border-gray-200 rounded-lg p-4 ' + (item.enabled ? '' : 'bg-gray-50 opacity-60') + '">' +
+                        '<div class="flex justify-between items-start">' +
+                            '<div class="flex-1">' +
+                                '<div class="flex items-center space-x-2 mb-1">' +
+                                    '<span class="font-medium text-gray-900">' + escapeHtml(item.title) + '</span>' +
+                                    (item.category ? '<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">' + escapeHtml(item.category) + '</span>' : '') +
+                                    '<span class="text-xs text-gray-400">优先级:' + item.priority + '</span>' +
+                                '</div>' +
+                                '<div class="text-sm text-gray-600 line-clamp-2">' + escapeHtml(item.content) + '</div>' +
+                            '</div>' +
+                            '<div class="flex space-x-2 ml-4">' +
+                                '<button onclick="editContext(' + item.id + ')" class="text-blue-500 hover:text-blue-700">' +
+                                    '<i class="fas fa-edit"></i>' +
+                                '</button>' +
+                                '<button onclick="deleteContext(' + item.id + ')" class="text-red-500 hover:text-red-700">' +
+                                    '<i class="fas fa-trash"></i>' +
+                                '</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            } catch (e) {
+                document.getElementById('contextList').innerHTML = '<div class="text-center py-8 text-red-500">加载失败</div>';
+            }
+        }
+
+        async function editContext(id) {
+            try {
+                const res = await fetch(API_BASE_URL + '/manage/context/' + id);
+                const item = await res.json();
+                document.getElementById('editContextId').value = id;
+                document.getElementById('contextTitle').value = item.title;
+                document.getElementById('contextContent').value = item.content;
+                document.getElementById('contextCategory').value = item.category || '';
+                document.getElementById('contextPriority').value = item.priority || 0;
+                document.getElementById('contextPriorityValue').textContent = item.priority || 0;
+                document.getElementById('contextEnabled').checked = item.enabled !== 0;
+                document.getElementById('contextTitle').scrollIntoView({ behavior: 'smooth' });
+            } catch (e) {
+                alert('加载失败：' + e.message);
+            }
+        }
+
+        async function deleteContext(id) {
+            if (!confirm('确定要删除这条内容吗？')) return;
+            try {
+                const res = await fetch(API_BASE_URL + '/manage/context/' + id, { method: 'DELETE' });
+                if (res.ok) {
+                    loadContextList();
+                } else {
+                    alert('删除失败');
+                }
+            } catch (e) {
+                alert('删除失败：' + e.message);
+            }
+        }
+
+        function resetContextForm() {
+            document.getElementById('contextForm').reset();
+            document.getElementById('editContextId').value = '';
+            document.getElementById('contextPriorityValue').textContent = '0';
+        }
+
         window.onload = () => {
             loadStats();
             loadConfig();
             loadKnowledgeBase();
             loadUnanswered();
+            loadContextList();
         };
     </script>
 </body>
@@ -673,6 +875,30 @@ async function handleRequest(request, env) {
     return await analyzeGaps(env);
   }
   
+  // 前言内容管理API
+  if (path === '/manage/context') {
+    if (request.method === 'GET') {
+      return await getAllContext(env);
+    }
+    if (request.method === 'POST') {
+      return await addContext(request, env);
+    }
+  }
+  
+  const contextMatch = path.match(/^\/manage\/context\/(\d+)$/);
+  if (contextMatch) {
+    const id = parseInt(contextMatch[1]);
+    if (request.method === 'GET') {
+      return await getContext(id, env);
+    }
+    if (request.method === 'PUT') {
+      return await updateContext(id, request, env);
+    }
+    if (request.method === 'DELETE') {
+      return await deleteContext(id, env);
+    }
+  }
+  
   if (request.method === 'GET' && path === '/') {
     return new Response(INDEX_HTML, {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -712,7 +938,8 @@ async function getConfig(env) {
         useAIClassifier: config.use_ai_classifier !== 0,
         useAIAnswer: config.use_ai_answer !== 0,
         similarityThreshold: config.similarity_threshold || 0.6,
-        maxContextItems: config.max_context_items || 5
+        maxContextItems: config.max_context_items || 5,
+        aiDailyLimit: config.ai_daily_limit || 100
       };
     } else {
       configCache = {
@@ -721,7 +948,8 @@ async function getConfig(env) {
         useAIClassifier: true,
         useAIAnswer: true,
         similarityThreshold: 0.6,
-        maxContextItems: 5
+        maxContextItems: 5,
+        aiDailyLimit: 100
       };
     }
     return jsonResponse(configCache);
@@ -732,7 +960,8 @@ async function getConfig(env) {
       useAIClassifier: true,
       useAIAnswer: true,
       similarityThreshold: 0.6,
-      maxContextItems: 5
+      maxContextItems: 5,
+      aiDailyLimit: 100
     });
   }
 }
@@ -740,20 +969,21 @@ async function getConfig(env) {
 async function saveConfig(request, env) {
   try {
     const body = await request.json();
-    const { botEnabled, onlyMentioned, useAIClassifier, useAIAnswer, similarityThreshold, maxContextItems } = body;
+    const { botEnabled, onlyMentioned, useAIClassifier, useAIAnswer, similarityThreshold, maxContextItems, aiDailyLimit } = body;
     
     await env.DB.prepare(
-      'INSERT OR REPLACE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items) VALUES (1, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items, ai_daily_limit) VALUES (1, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       botEnabled ? 1 : 0,
       onlyMentioned ? 1 : 0,
       useAIClassifier ? 1 : 0,
       useAIAnswer ? 1 : 0,
       similarityThreshold,
-      maxContextItems
+      maxContextItems,
+      aiDailyLimit || 100
     ).run();
     
-    configCache = { botEnabled, onlyMentioned, useAIClassifier, useAIAnswer, similarityThreshold, maxContextItems };
+    configCache = { botEnabled, onlyMentioned, useAIClassifier, useAIAnswer, similarityThreshold, maxContextItems, aiDailyLimit: aiDailyLimit || 100 };
     return jsonResponse({ success: true });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
@@ -779,9 +1009,10 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
     
-    await env.DB.prepare(
+    // 异步记录消息，不等待完成
+    env.DB.prepare(
       'INSERT INTO messages (chat_id, user_id, user_name, message, chat_type) VALUES (?, ?, ?, ?, ?)'
-    ).bind(chatId, userId, userName, messageText, chatType).run();
+    ).bind(chatId, userId, userName, messageText, chatType).run().catch(() => {});
     
     if (!configCache) {
       await getConfig(env);
@@ -803,14 +1034,24 @@ async function handleTelegramWebhook(request, env) {
     
     // 步骤1：AI意图识别
     let shouldAnswer = false;
+    let classificationIntent = 'unknown';
+    let classificationConfidence = 0;
     
     if (configCache.useAIClassifier !== false) {
-      const classification = await classifyIntent(env, cleanText);
-      shouldAnswer = classification.shouldAnswer;
-      
-      await env.DB.prepare(
-        'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence) VALUES (?, ?, ?, ?, ?)'
-      ).bind(chatId, userId, cleanText, classification.intent, classification.confidence).run();
+      try {
+        const classification = await classifyIntent(env, cleanText);
+        shouldAnswer = classification.shouldAnswer;
+        classificationIntent = classification.intent;
+        classificationConfidence = classification.confidence;
+        
+        // 异步记录AI调用，不等待完成
+        env.DB.prepare(
+          'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence) VALUES (?, ?, ?, ?, ?)'
+        ).bind(chatId, userId, cleanText, classification.intent, classification.confidence).run().catch(() => {});
+      } catch (aiError) {
+        console.error('AI classification failed:', aiError);
+        shouldAnswer = true;
+      }
     } else {
       shouldAnswer = true;
     }
@@ -826,27 +1067,34 @@ async function handleTelegramWebhook(request, env) {
       let responseText;
       let answerType;
       
-      if (configCache.useAIAnswer !== false && matches[0].similarity < 0.95) {
+      if (configCache.useAIAnswer !== false && matches[0].similarity < 0.85) {
         // 使用AI生成答案，参考匹配到的知识库
         responseText = await generateAIAnswer(env, cleanText, matches);
         answerType = 'ai';
       } else {
-        // 直接使用知识库答案
+        // 直接使用知识库答案（相似度>=0.85时跳过AI）
         responseText = matches[0].answer;
         answerType = 'kb';
       }
       
+      // 先发送消息，再异步记录
       await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
-      await recordAnswer(env, chatId, userId, userName, cleanText, responseText, answerType, matches[0].similarity);
       
-      const today = new Date().toISOString().split('T')[0];
-      await env.DB.prepare(
-        'UPDATE bot_stats SET answers_today = answers_today + 1, total_answers = total_answers + 1 WHERE date = ?'
-      ).bind(today).run();
+      // 异步记录回答和统计，不等待完成
+      Promise.all([
+        recordAnswer(env, chatId, userId, userName, cleanText, responseText, answerType, matches[0].similarity),
+        (async () => {
+          const today = new Date().toISOString().split('T')[0];
+          await env.DB.prepare(
+            'UPDATE bot_stats SET answers_today = answers_today + 1, total_answers = total_answers + 1 WHERE date = ?'
+          ).bind(today).run();
+        })()
+      ]).catch(() => {});
     } else {
-      await env.DB.prepare(
+      // 异步记录未回答问题，不等待完成
+      env.DB.prepare(
         'INSERT INTO unanswered (chat_id, user_id, user_name, message, chat_type, ai_classified) VALUES (?, ?, ?, ?, ?, 1)'
-      ).bind(chatId, userId, userName, cleanText, chatType).run();
+      ).bind(chatId, userId, userName, cleanText, chatType).run().catch(() => {});
     }
     
     return new Response('OK', { status: 200 });
@@ -856,64 +1104,205 @@ async function handleTelegramWebhook(request, env) {
   }
 }
 
+// 缓存关键词列表
+let keywordsCache = null;
+let keywordsCacheTime = 0;
+const KEYWORDS_CACHE_TTL = 60000; // 1分钟缓存
+
+// AI每日使用计数缓存
+let aiDailyCount = null;
+let aiDailyCountDate = null;
+
+// 检查AI配额
+async function checkAIQuota(env) {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const limit = configCache?.aiDailyLimit || 100;
+    
+    // 检查缓存的计数是否过期
+    if (aiDailyCountDate !== today) {
+      aiDailyCount = 0;
+      aiDailyCountDate = today;
+    }
+    
+    // 如果缓存计数已超限，直接返回false
+    if (aiDailyCount >= limit) {
+      return { allowed: false, remaining: 0 };
+    }
+    
+    // 查询今日实际使用量
+    const result = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM ai_calls WHERE DATE(created_at) = DATE('now')"
+    ).first();
+    
+    const actualCount = result?.count || 0;
+    aiDailyCount = actualCount;
+    
+    const remaining = Math.max(0, limit - actualCount);
+    return { allowed: remaining > 0, remaining };
+  } catch (error) {
+    console.error('Check AI quota error:', error);
+    // 出错时允许调用（保守策略）
+    return { allowed: true, remaining: 1 };
+  }
+}
+
+// 增加AI使用计数
+function incrementAICount() {
+  aiDailyCount = (aiDailyCount || 0) + 1;
+}
+
 // AI意图分类
 async function classifyIntent(env, message) {
   try {
-    // 获取知识库样本
-    const knowledgeBase = await env.DB.prepare(
-      'SELECT qa.answer, GROUP_CONCAT(kq.question, "|") as questions FROM knowledge_answers qa JOIN knowledge_questions kq ON qa.id = kq.answer_id WHERE qa.enabled = 1 AND kq.enabled = 1 GROUP BY qa.id LIMIT 5'
-    ).all();
+    const messageLower = message.toLowerCase();
     
-    const sampleQA = knowledgeBase.results.map(k => {
-      const questions = k.questions.split('|').slice(0, 2).join(', ');
-      return `问题示例：${questions}`;
-    }).join('\n');
+    // 首先快速检查常见疑问词（无需数据库查询）
+    const quickQuestionWords = ['怎么', '如何', '什么', '多少', '为什么', '吗', '呢', '？', '?', '客服', '联系', '电话', '价格', '多少钱', '帮助'];
+    const hasQuickMatch = quickQuestionWords.some(w => messageLower.includes(w));
     
-    const systemPrompt = `你是一个意图分类器。判断用户消息是否在询问以下类型的问题：
-${sampleQA}
-
-如果用户在问以上类似的问题，回复：ANSWER
-如果用户在闲聊、打招呼或问无关问题，回复：IGNORE
-只回复一个单词：ANSWER 或 IGNORE`;
+    // 检查缓存的关键词
+    const now = Date.now();
+    if (!keywordsCache || now - keywordsCacheTime > KEYWORDS_CACHE_TTL) {
+      const keywordsResult = await env.DB.prepare(
+        'SELECT DISTINCT keywords FROM knowledge_questions WHERE enabled = 1 AND keywords IS NOT NULL AND keywords != ""'
+      ).all();
+      keywordsCache = keywordsResult.results || [];
+      keywordsCacheTime = now;
+    }
+    
+    // 检查关键词匹配
+    for (const k of keywordsCache) {
+      if (k.keywords) {
+        const keywordList = k.keywords.toLowerCase().split(',').map(kw => kw.trim()).filter(kw => kw);
+        for (const keyword of keywordList) {
+          if (keyword && messageLower.includes(keyword)) {
+            return { shouldAnswer: true, intent: 'keyword_match', confidence: 0.95, usedAI: false };
+          }
+        }
+      }
+    }
+    
+    // 如果快速匹配到疑问词，直接回答（跳过AI）
+    if (hasQuickMatch) {
+      return { shouldAnswer: true, intent: 'quick_match', confidence: 0.8, usedAI: false };
+    }
+    
+    // 检查AI配额
+    const quota = await checkAIQuota(env);
+    if (!quota.allowed) {
+      console.log('AI quota exceeded, using fallback logic');
+      // 配额用完时，保守策略：如果包含疑问词就回答
+      const questionWords = ['怎么', '如何', '什么', '多少', '为什么', '吗', '呢', '？', '?', '客服', '联系', '电话', '价格', '多少钱', '帮助'];
+      const hasQuestion = questionWords.some(w => message.includes(w));
+      return { shouldAnswer: hasQuestion, intent: 'quota_limited', confidence: 0.5, usedAI: false };
+    }
+    
+    // 使用AI分类（仅对不确定的消息）
+    const systemPrompt = `判断用户是否在问问题。如果是问问题，回复ANSWER；如果是闲聊打招呼，回复IGNORE。只回复一个单词。`;
 
     const response = await env.AI.run('@cf/meta/llama-3.2-1b-instruct', {
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: message }
+        { role: 'user', content: `用户消息：${message}\n这是问题吗？` }
       ],
       temperature: 0.1,
       max_tokens: 10
     });
     
-    const result = response.response?.trim().toUpperCase() || 'IGNORE';
-    const shouldAnswer = result.includes('ANSWER');
+    incrementAICount();
+    
+    const result = response.response?.trim().toUpperCase() || '';
+    const shouldAnswer = result.includes('ANSWER') || result.includes('是') || result.includes('YES');
     
     return {
       shouldAnswer,
       intent: shouldAnswer ? 'question' : 'ignore',
-      confidence: shouldAnswer ? 0.9 : 0.1
+      confidence: shouldAnswer ? 0.9 : 0.1,
+      usedAI: true
     };
   } catch (error) {
     console.error('AI classification error:', error);
-    return { shouldAnswer: true, intent: 'unknown', confidence: 0.5 };
+    // 出错时，如果包含疑问词就回答
+    const questionWords = ['怎么', '如何', '什么', '多少', '为什么', '吗', '呢', '？', '?', '客服', '联系', '电话', '价格', '多少钱', '帮助'];
+    const hasQuestion = questionWords.some(w => message.includes(w));
+    return { shouldAnswer: hasQuestion, intent: 'fallback', confidence: 0.5, usedAI: false };
+  }
+}
+
+// AI答案缓存
+const aiAnswerCache = new Map();
+const AI_ANSWER_CACHE_TTL = 300000; // 5分钟缓存
+
+// 前言内容缓存
+let contextCache = null;
+let contextCacheTime = 0;
+const CONTEXT_CACHE_TTL = 60000; // 1分钟缓存
+
+// 获取前言内容
+async function getContextContent(env) {
+  try {
+    const now = Date.now();
+    if (!contextCache || now - contextCacheTime > CONTEXT_CACHE_TTL) {
+      const result = await env.DB.prepare(
+        'SELECT title, content FROM knowledge_context WHERE enabled = 1 ORDER BY priority DESC, id ASC LIMIT 5'
+      ).all();
+      contextCache = result.results || [];
+      contextCacheTime = now;
+    }
+    return contextCache;
+  } catch (error) {
+    console.error('Get context error:', error);
+    return [];
   }
 }
 
 // AI生成答案，参考知识库
 async function generateAIAnswer(env, userQuestion, matches) {
   try {
+    // 如果最佳匹配相似度很高，直接返回答案（跳过AI）
+    if (matches[0].similarity >= 0.85) {
+      return matches[0].answer;
+    }
+    
+    // 检查缓存
+    const cacheKey = userQuestion.toLowerCase().trim();
+    const cached = aiAnswerCache.get(cacheKey);
+    if (cached && Date.now() - cached.time < AI_ANSWER_CACHE_TTL) {
+      return cached.answer;
+    }
+    
+    // 检查AI配额
+    const quota = await checkAIQuota(env);
+    if (!quota.allowed) {
+      console.log('AI quota exceeded for answer generation, using knowledge base answer');
+      return matches[0].answer;
+    }
+    
+    // 获取前言内容
+    const contextContents = await getContextContent(env);
+    const contextText = contextContents.map(c => `【${c.title}】\n${c.content}`).join('\n\n');
+    
     // 构建知识库上下文
-    const context = matches.slice(0, 3).map((m, i) => {
+    const kbContext = matches.slice(0, 2).map((m, i) => {
       return `参考${i + 1}：\n问题：${m.question}\n答案：${m.answer}`;
     }).join('\n\n');
     
-    const systemPrompt = `你是一个智能客服助手。请根据以下知识库内容，回答用户的问题。
-如果知识库中有直接匹配的答案，请基于知识库内容回答。
-如果知识库中没有完全匹配的答案，请根据最相关的知识进行合理回答。
-回答要简洁、准确、友好。
+    let systemPrompt;
+    if (contextText) {
+      systemPrompt = `你是客服助手。根据以下背景知识和知识库回答用户问题，简洁准确。
 
-知识库内容：
-${context}`;
+背景知识：
+${contextText}
+
+知识库：
+${kbContext}`;
+    } else {
+      systemPrompt = `你是客服助手。根据知识库回答用户问题，简洁准确。
+
+知识库：
+${kbContext}`;
+    }
 
     const response = await env.AI.run('@cf/meta/llama-3.2-1b-instruct', {
       messages: [
@@ -921,10 +1310,17 @@ ${context}`;
         { role: 'user', content: userQuestion }
       ],
       temperature: 0.3,
-      max_tokens: 500
+      max_tokens: 200  // 减少token数量，加快响应
     });
     
-    return response.response?.trim() || matches[0].answer;
+    incrementAICount();
+    
+    const answer = response.response?.trim() || matches[0].answer;
+    
+    // 缓存结果
+    aiAnswerCache.set(cacheKey, { answer, time: Date.now() });
+    
+    return answer;
   } catch (error) {
     console.error('AI answer generation error:', error);
     // AI失败时返回最佳匹配的原始答案
@@ -932,18 +1328,43 @@ ${context}`;
   }
 }
 
+// 知识库缓存
+let knowledgeCache = null;
+let knowledgeCacheTime = 0;
+const KNOWLEDGE_CACHE_TTL = 30000; // 30秒缓存
+
 // 在知识库中查找最佳匹配
 async function findBestMatches(env, query, maxResults = 5) {
   try {
-    const allQuestions = await env.DB.prepare(
-      'SELECT kq.id, kq.question, kq.answer_id, kq.keywords, qa.answer FROM knowledge_questions kq JOIN knowledge_answers qa ON kq.answer_id = qa.id WHERE kq.enabled = 1 AND qa.enabled = 1'
-    ).all();
+    const queryLower = query.toLowerCase();
     
-    if (!allQuestions.results || allQuestions.results.length === 0) {
+    // 检查缓存
+    const now = Date.now();
+    let allQuestions;
+    
+    if (!knowledgeCache || now - knowledgeCacheTime > KNOWLEDGE_CACHE_TTL) {
+      const result = await env.DB.prepare(
+        'SELECT kq.id, kq.question, kq.answer_id, kq.keywords, qa.answer FROM knowledge_questions kq JOIN knowledge_answers qa ON kq.answer_id = qa.id WHERE kq.enabled = 1 AND qa.enabled = 1'
+      ).all();
+      knowledgeCache = result.results || [];
+      knowledgeCacheTime = now;
+    }
+    
+    allQuestions = knowledgeCache;
+    
+    if (allQuestions.length === 0) {
       return [];
     }
     
-    const scored = allQuestions.results.map(item => {
+    // 快速路径：直接匹配
+    for (const item of allQuestions) {
+      if (item.question.toLowerCase() === queryLower) {
+        return [{ ...item, similarity: 1.0 }];
+      }
+    }
+    
+    // 计算相似度
+    const scored = allQuestions.map(item => {
       const similarity = calculateSimilarity(query, item.question, item.keywords);
       return { ...item, similarity };
     });
@@ -1191,6 +1612,87 @@ async function deleteKnowledge(id, env) {
   try {
     // 级联删除会自动删除相关问题
     await env.DB.prepare('DELETE FROM knowledge_answers WHERE id = ?').bind(id).run();
+    return jsonResponse({ success: true });
+  } catch (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+// 前言内容管理函数
+async function getAllContext(env) {
+  try {
+    const items = await env.DB.prepare(
+      'SELECT id, title, content, category, priority, enabled, created_at FROM knowledge_context ORDER BY priority DESC, id ASC'
+    ).all();
+    return jsonResponse(items.results || []);
+  } catch (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+async function getContext(id, env) {
+  try {
+    const item = await env.DB.prepare(
+      'SELECT id, title, content, category, priority, enabled FROM knowledge_context WHERE id = ?'
+    ).bind(id).first();
+    if (item) {
+      return jsonResponse(item);
+    }
+    return jsonResponse({ error: 'Not found' }, 404);
+  } catch (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+async function addContext(request, env) {
+  try {
+    const body = await request.json();
+    const { title, content, category, priority, enabled } = body;
+    
+    if (!title || !content) {
+      return jsonResponse({ error: '标题和内容不能为空' }, 400);
+    }
+    
+    const result = await env.DB.prepare(
+      'INSERT INTO knowledge_context (title, content, category, priority, enabled) VALUES (?, ?, ?, ?, ?)'
+    ).bind(title, content, category || '', priority || 0, enabled !== false ? 1 : 0).run();
+    
+    // 清除缓存
+    contextCache = null;
+    
+    return jsonResponse({ success: true, id: result.meta?.last_row_id });
+  } catch (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+async function updateContext(id, request, env) {
+  try {
+    const body = await request.json();
+    const { title, content, category, priority, enabled } = body;
+    
+    if (!title || !content) {
+      return jsonResponse({ error: '标题和内容不能为空' }, 400);
+    }
+    
+    await env.DB.prepare(
+      'UPDATE knowledge_context SET title = ?, content = ?, category = ?, priority = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(title, content, category || '', priority || 0, enabled !== false ? 1 : 0, id).run();
+    
+    // 清除缓存
+    contextCache = null;
+    
+    return jsonResponse({ success: true });
+  } catch (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+async function deleteContext(id, env) {
+  try {
+    await env.DB.prepare('DELETE FROM knowledge_context WHERE id = ?').bind(id).run();
+    // 清除缓存
+    contextCache = null;
     return jsonResponse({ success: true });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);

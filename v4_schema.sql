@@ -1,5 +1,6 @@
--- Telegram 智能知识库机器人 v4.6 数据库结构
--- 功能：AI学习知识库回答 + 多问题对应同一答案
+-- Telegram 智能知识库机器人 v4.7 数据库结构
+-- 功能：AI学习知识库回答 + 多问题对应同一答案 + 前言内容管理
+-- 时间格式：UTC 存储，北京时间显示 (Asia/Shanghai)
 
 -- 机器人配置表
 CREATE TABLE IF NOT EXISTS bot_config (
@@ -10,6 +11,7 @@ CREATE TABLE IF NOT EXISTS bot_config (
   use_ai_answer INTEGER DEFAULT 1,
   similarity_threshold REAL DEFAULT 0.6,
   max_context_items INTEGER DEFAULT 5,
+  ai_daily_limit INTEGER DEFAULT 100,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -35,6 +37,18 @@ CREATE TABLE IF NOT EXISTS knowledge_questions (
   enabled INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (answer_id) REFERENCES knowledge_answers(id) ON DELETE CASCADE
+);
+
+-- 前言/背景知识表（AI回答时的参考内容）
+CREATE TABLE IF NOT EXISTS knowledge_context (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  category TEXT,
+  priority INTEGER DEFAULT 0,
+  enabled INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 消息记录表
@@ -97,8 +111,8 @@ CREATE TABLE IF NOT EXISTS bot_stats (
 );
 
 -- 插入默认配置
-INSERT OR IGNORE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items) 
-VALUES (1, 1, 0, 1, 1, 0.6, 5);
+INSERT OR IGNORE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items, ai_daily_limit) 
+VALUES (1, 1, 0, 1, 1, 0.6, 5, 100);
 
 -- 插入今天的统计记录
 INSERT OR IGNORE INTO bot_stats (date, answers_today, total_answers, ai_calls_today) 
@@ -113,3 +127,5 @@ CREATE INDEX IF NOT EXISTS idx_unanswered_ai_classified ON unanswered(ai_classif
 CREATE INDEX IF NOT EXISTS idx_knowledge_answers_enabled ON knowledge_answers(enabled);
 CREATE INDEX IF NOT EXISTS idx_knowledge_questions_answer_id ON knowledge_questions(answer_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_questions_enabled ON knowledge_questions(enabled);
+CREATE INDEX IF NOT EXISTS idx_knowledge_context_enabled ON knowledge_context(enabled);
+CREATE INDEX IF NOT EXISTS idx_knowledge_context_priority ON knowledge_context(priority);
