@@ -1,4 +1,4 @@
-# Telegram 智能知识库机器人 v4.7
+# Telegram 智能知识库机器人 v4.8
 
 基于 Cloudflare Workers + D1 数据库 + AI 的 Telegram 智能问答机器人，采用**AI学习知识库 + 多问题对应同一答案 + 前言内容管理**架构。
 
@@ -14,6 +14,7 @@
 - 📊 **统计分析** - 记录AI调用、回答情况、发现知识库缺口
 - 🎛️ **灵活配置** - 可开关AI分类器/AI回答、调整匹配阈值、设置AI限额
 - 🌐 **Web管理** - 可视化知识库管理，支持批量添加问题变体
+- 📥 **导入导出** - 支持知识库的导入导出，方便备份和迁移
 - 🕐 **北京时间显示** - 所有时间按北京时间 (Asia/Shanghai) 显示
 
 ## 🏗️ 架构设计
@@ -115,9 +116,15 @@ npx wrangler deploy
 ### 6. 设置 Webhook
 
 ```bash
+# 使用 PowerShell
+$botToken = "your-bot-token"
+$webhookUrl = "https://your-worker.your-subdomain.workers.dev/webhook"
+Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/setWebhook?url=$webhookUrl" -Method Post
+
+# 或使用 curl
 curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
   -H "Content-Type: application/json" \
-  -d "{\"url\":\"https://your-worker.your-subdomain.workers.dev/webhook\"}"
+  -d '{"url":"https://your-worker.your-subdomain.workers.dev/webhook"}'
 ```
 
 ## 📖 使用指南
@@ -154,6 +161,18 @@ curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
 - 添加多个问题变体（每行一个）
 - 设置分类和关键词
 - 编辑/删除条目
+- 导入/导出知识库
+
+### 导入导出功能
+
+**导出：**
+- 点击"导出"按钮，下载知识库为文本文件
+- 格式：`"问题1"|"问题2"|"问题3"=答案内容`
+
+**导入：**
+- 点击"导入"按钮
+- 粘贴导出格式的文本
+- 每行一个条目，格式：`问题1|问题2|问题3=答案`
 
 ### 添加知识示例
 
@@ -192,47 +211,64 @@ curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
 
 ```
 .
-├── worker.js          # 主程序代码（包含前端界面）
-├── v4_schema.sql      # 数据库结构
-├── wrangler.toml      # Cloudflare 配置
-├── package.json       # 项目依赖
-├── README.md          # 项目说明
-└── test-server.js     # 本地测试服务器
+├── worker.js              # 主程序代码（包含前端界面）
+├── v4_schema.sql          # 数据库结构
+├── test_data.sql          # 测试数据
+├── wrangler.toml          # Cloudflare 配置
+├── package.json           # 项目依赖
+├── README.md              # 项目说明
+├── set-webhook.ps1        # 设置 Webhook 脚本
+├── check-kb.ps1           # 检查知识库数据脚本
+├── check-messages.ps1     # 检查消息记录脚本
+└── check-webhook.ps1      # 检查 Webhook 状态脚本
 ```
 
-## 🔧 技术栈
+## 🔧 管理脚本
 
-- **Cloudflare Workers** - 边缘计算平台
-- **Cloudflare D1** - SQLite 边缘数据库
-- **Cloudflare Workers AI** - Llama 3.2 1B 模型
-- **Telegram Bot API** - 消息接口
-- **Levenshtein Distance** - 文本相似度算法
+### 设置 Webhook
+```powershell
+# 修改 set-webhook.ps1 中的 botToken 和 webhookUrl，然后运行
+.\set-webhook.ps1
+```
+
+### 检查知识库数据
+```powershell
+.\check-kb.ps1
+```
+
+### 检查消息记录
+```powershell
+.\check-messages.ps1
+```
+
+### 检查 Webhook 状态
+```powershell
+.\check-webhook.ps1
+```
+
+## 🐛 调试
+
+访问以下端点查看调试信息：
+
+```
+https://your-worker.your-subdomain.workers.dev/debug/messages
+https://your-worker.your-subdomain.workers.dev/debug/stats
+```
 
 ## 📝 更新日志
 
-### v4.7 (2025-03-18)
-- ✨ 新增前言/背景知识管理功能
-- ✨ 新增AI每日限额控制
-- ⚡ 优化响应速度（多级缓存）
-- 🕐 时间显示改为北京时间
-- 💰 优化AI调用策略，减少消耗
+### v4.8 (2026-03-18)
+- 修复统计数据不更新的问题
+- 添加导出导入功能
+- 修复 JavaScript 语法错误
+- 优化响应速度
 
-### v4.6 (2025-03-17)
-- ✨ AI学习知识库生成回答
-- ✨ 支持多问题对应同一答案
-- ✨ 新增AI参考知识数量配置
-- 🗄️ 优化知识库数据结构
+### v4.7 (之前版本)
+- 添加前言/背景知识管理
+- AI回答时参考前言内容
+- 添加AI配额控制
+- 北京时间显示
 
-### v4.5 (2025-03-17)
-- ✨ 新增AI意图识别功能
-- 🎯 使用 Llama 3.2 1B 轻量级模型
-- 📊 新增AI调用统计和消耗监控
-
-### v4.0 (2025-03-17)
-- ✨ 全新知识库匹配系统
-- 📝 支持批量导入/导出
-- 🔍 新增知识库缺口分析
-
-## 📄 License
+## 📄 许可证
 
 MIT License
