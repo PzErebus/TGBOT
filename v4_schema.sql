@@ -1,5 +1,5 @@
--- Telegram 智能知识库机器人 v4.7 数据库结构
--- 功能：AI学习知识库回答 + 多问题对应同一答案 + 前言内容管理
+-- Telegram 智能知识库机器人 v4.8 数据库结构
+-- 功能：AI学习知识库回答 + 多问题对应同一答案 + 前言内容管理 + 智能防刷屏
 -- 时间格式：UTC 存储，北京时间显示 (Asia/Shanghai)
 
 -- 机器人配置表
@@ -100,6 +100,16 @@ CREATE TABLE IF NOT EXISTS unanswered (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 消息频率表（用于防刷屏检测）
+CREATE TABLE IF NOT EXISTS message_frequency (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_hash TEXT NOT NULL,
+  chat_id INTEGER NOT NULL,
+  count INTEGER DEFAULT 1,
+  first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 统计表
 CREATE TABLE IF NOT EXISTS bot_stats (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,3 +139,5 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_questions_answer_id ON knowledge_questi
 CREATE INDEX IF NOT EXISTS idx_knowledge_questions_enabled ON knowledge_questions(enabled);
 CREATE INDEX IF NOT EXISTS idx_knowledge_context_enabled ON knowledge_context(enabled);
 CREATE INDEX IF NOT EXISTS idx_knowledge_context_priority ON knowledge_context(priority);
+CREATE INDEX IF NOT EXISTS idx_message_frequency_hash ON message_frequency(message_hash);
+CREATE INDEX IF NOT EXISTS idx_message_frequency_chat ON message_frequency(chat_id);

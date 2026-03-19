@@ -1090,7 +1090,7 @@ async function getConfig(env) {
         onlyMentioned: config.only_mentioned === 1,
         useAIClassifier: config.use_ai_classifier === 1,
         useAIAnswer: config.use_ai_answer === 1,
-        similarityThreshold: config.similarity_threshold || 0.6,
+        similarityThreshold: config.similarity_threshold !== undefined && config.similarity_threshold !== null ? config.similarity_threshold : 0.6,
         maxContextItems: config.max_context_items || 5,
         aiDailyLimit: config.ai_daily_limit || 100
       };
@@ -1129,7 +1129,7 @@ async function getConfigApi(env) {
         onlyMentioned: config.only_mentioned === 1,
         useAIClassifier: config.use_ai_classifier === 1,
         useAIAnswer: config.use_ai_answer === 1,
-        similarityThreshold: config.similarity_threshold || 0.6,
+        similarityThreshold: config.similarity_threshold !== undefined && config.similarity_threshold !== null ? config.similarity_threshold : 0.6,
         maxContextItems: config.max_context_items || 5,
         aiDailyLimit: config.ai_daily_limit || 100
       });
@@ -1163,7 +1163,7 @@ async function saveConfig(request, env) {
       onlyMentioned ? 1 : 0,
       useAIClassifier !== false ? 1 : 0,
       useAIAnswer !== false ? 1 : 0,
-      similarityThreshold || 0.6,
+      similarityThreshold !== undefined && similarityThreshold !== null ? similarityThreshold : 0.6,
       maxContextItems || 5,
       aiDailyLimit || 100
     ).run();
@@ -1270,9 +1270,10 @@ async function handleTelegramWebhook(request, env) {
     console.log('Searching knowledge base for:', cleanText);
     const matches = await findBestMatches(env, cleanText, config.maxContextItems || 5);
     console.log('Matches found:', matches.length, 'Best similarity:', matches[0]?.similarity);
-    console.log('Threshold:', config.similarityThreshold || 0.6);
+    const threshold = config.similarityThreshold !== undefined && config.similarityThreshold !== null ? config.similarityThreshold : 0.6;
+    console.log('Threshold:', threshold);
     
-    if (matches.length > 0 && matches[0].similarity >= (config.similarityThreshold || 0.6)) {
+    if (matches.length > 0 && matches[0].similarity >= threshold) {
       console.log('Match found, preparing to send response');
       console.log('Sending response with similarity:', matches[0].similarity);
       let responseText;
@@ -1513,16 +1514,18 @@ function calculateSimilarity(query, question, keywords) {
   if (queryLower === questionLower) return 1.0;
   
   // 检查是否包含查询词（但查询词不能太短）
+  // 降低包含匹配的相似度，避免误匹配
   if (queryLower.length >= 2) {
-    if (questionLower.includes(queryLower)) return 0.9;
-    if (queryLower.includes(questionLower) && questionLower.length >= 3) return 0.9;
+    // 查询完全包含问题，或问题完全包含查询
+    if (questionLower.includes(queryLower)) return 0.75;
+    if (queryLower.includes(questionLower) && questionLower.length >= 3) return 0.75;
   }
   
   if (keywords) {
     const keywordList = keywords.toLowerCase().split(',').map(k => k.trim()).filter(k => k);
     for (const keyword of keywordList) {
       if (keyword.length >= 2 && queryLower.includes(keyword)) {
-        return 0.85;
+        return 0.7;
       }
     }
   }
@@ -1667,13 +1670,19 @@ async function generateAIAnswer(env, userQuestion, matches, config) {
 const NICKNAME_PREFIXES = [
   '喂，', '嘿，', '哟，', '啊，', '哼，', '啧，', '哎，', '呐，',
   '诶，', '哈，', '哇，', '嘁，', '切，', '呃，', '嗯，', '嘛，',
-  '喂喂，', '嘿嘿，', '呀呀，', '哼哼，', '啧啧，', '哎呀，', '哎哟，', '我说，'
+  '喂喂，', '嘿嘿，', '呀呀，', '哼哼，', '啧啧，', '哎呀，', '哎哟，', '我说，',
+  '拜托，', '真是的，', '我的天，', '老天，', '拜托拜托，', '求你了，', '听着，', '注意啦，',
+  '咳咳，', '那个，', '话说，', '讲真，', '实话说，', '老实说，', '讲真的，', '说实话，',
+  '哎呀呀，', '哎嘿嘿，', '呜呼呼，', '啧啧啧，', '哼唧唧，', '气鼓鼓，', '凶巴巴，', '奶凶凶，'
 ];
 
 const NICKNAME_SUFFIXES = [
   '小笨蛋', '小迷糊', '小懒虫', '小馋猫', '小淘气', '小傻瓜', '小憨憨', '小屁孩',
   '小机灵鬼', '小捣蛋', '小闹腾', '小磨人精', '小跟班', '小话痨', '小戏精', '小祖宗',
-  '小冤家', '小讨债鬼', '小麻烦精', '小粘人精', '小醋坛子', '小哭包', '小懒猪', '小馋鬼'
+  '小冤家', '小讨债鬼', '小麻烦精', '小粘人精', '小醋坛子', '小哭包', '小懒猪', '小馋鬼',
+  '小魔女', '小恶魔', '小天使', '小怪兽', '小迷糊蛋', '小糊涂虫', '小瞌睡虫', '小贪吃鬼',
+  '小捣蛋鬼', '小调皮鬼', '小机灵虫', '小滑头', '小坏蛋', '小乖乖', '小宝贝蛋', '小甜心',
+  '小可爱', '小萌物', '小团子', '小布丁', '小蛋糕', '小饼干', '小糖果', '小奶茶'
 ];
 
 // 获取个性化称呼
@@ -1702,7 +1711,32 @@ function addPersonalizedGreeting(responseText, userName) {
     `😮‍💨 ${nickname}，叹气...`,
     `🤦 ${nickname}，扶额...`,
     `😵‍💫 ${nickname}，晕...`,
-    `🤐 ${nickname}，好吧好吧：`
+    `🤐 ${nickname}，好吧好吧：`,
+    `😡 ${nickname}，气死我了！`,
+    `🥺 ${nickname}，求求你用用脑子吧：`,
+    `😤 ${nickname}，我要生气了！`,
+    `🙃 ${nickname}，你是不是故意的？`,
+    `😒 ${nickname}，我怀疑你在耍我：`,
+    `🤔 ${nickname}，让我想想怎么说你才能懂：`,
+    `😏 ${nickname}，准备好记笔记了吗？`,
+    `😐 ${nickname}，我尽量说简单点：`,
+    `😌 ${nickname}，深呼吸...不生气：`,
+    `🤷 ${nickname}，我也没办法了：`,
+    `😅 ${nickname}，这个问题有点意思：`,
+    `🙄 ${nickname}，你确定你没问过吗？`,
+    `😤 ${nickname}，最后一次了啊！`,
+    `😶 ${nickname}，我无语了...`,
+    `🫠 ${nickname}，我的耐心正在消失：`,
+    `😵 ${nickname}，被你打败了：`,
+    `🤦‍♀️ ${nickname}，让我静静...`,
+    `😮 ${nickname}，这你都不知道？`,
+    `🙃 ${nickname}，我投降了：`,
+    `😤 ${nickname}，严肃点！`,
+    `🤨 ${nickname}，你认真听了吗？`,
+    `😒 ${nickname}，我再说最后一遍：`,
+    `🙄 ${nickname}，你是不是没睡醒？`,
+    `😌 ${nickname}，慢慢说，不着急：`,
+    `🤗 ${nickname}，虽然你很笨，但我还是告诉你吧：`
   ];
   const greeting = greetings[Math.floor(Math.random() * greetings.length)];
 
@@ -1730,7 +1764,51 @@ function addPersonalizedGreeting(responseText, userName) {
     `💢 哼！下次自己查！`,
     `🌟 好了好了，去玩吧小淘气`,
     `🎉 恭喜你，又学会了一个知识点！`,
-    `🏃 溜了溜了，问别人去吧~`
+    `🏃 溜了溜了，问别人去吧~`,
+    `😤 记住了吗？没记住我也不管了！`,
+    `🙄 我真的尽力了...`,
+    `😒 你要是再忘，我就...我就哭给你看！`,
+    `🤷 反正我说了，听没听随你`,
+    `😅 我讲得口干舌燥，你听懂了吗？`,
+    `🙃 好了好了，别再折磨我了`,
+    `😌 终于解脱了...`,
+    `🤗 虽然你很笨，但我还是爱你的~`,
+    `😏 下次问点有难度的，这个太简单了`,
+    `😐 我怀疑你在测试我的耐心`,
+    `😤 最后一次！真的是最后一次！`,
+    `🙄 你是不是故意来气我的？`,
+    `😒 我再说一遍，这次真的最后一遍！`,
+    `🫠 我的天，你怎么还在问这个`,
+    `😵 被你打败了，彻底打败了`,
+    `🤐 好了，我闭嘴了`,
+    `😌 呼...终于说完了`,
+    `🙏 拜托拜托，记住吧`,
+    `💢 哼！不理你了！`,
+    `🌟 乖~记住了就奖励你一颗糖`,
+    `🎉 撒花~你又变聪明了一点！`,
+    `🏃 拜拜了您嘞~`,
+    `😤 记住了啊！下次再问我就生气了！`,
+    `🙄 我真的服了你了...`,
+    `😒 你要是再记不住，我就...我就...算了`,
+    `🤷 随便吧，反正我说了`,
+    `😅 哈哈，你是不是觉得我很凶？`,
+    `🙃 好了好了，不凶你了`,
+    `😌 深呼吸，不生气，不生气`,
+    `🤗 抱抱~虽然你笨笨的`,
+    `😏 下次记得请我吃糖哦~`,
+    `😐 我说完了，你自便`,
+    `😤 记住了！记住了！记住了！`,
+    `🙄 你是不是在故意逗我玩？`,
+    `😒 我累了，真的累了`,
+    `🫠 我的耐心值：0%`,
+    `😵 被你问得怀疑人生...`,
+    `🤐 好了，我去静静`,
+    `😌 终于结束了...`,
+    `🙏 感谢收听，下次再见`,
+    `💢 哼！下次问别人去！`,
+    `🌟 好了，去玩吧，别烦我了`,
+    `🎉 恭喜毕业！这个问题你学会了！`,
+    `🏃 我溜了，你慢慢消化`
   ];
   const ending = endings[Math.floor(Math.random() * endings.length)];
 
