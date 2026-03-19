@@ -1,4 +1,4 @@
-# Telegram 智能知识库机器人 v4.8
+# Telegram 智能知识库机器人 
 
 基于 Cloudflare Workers + D1 数据库 + AI 的 Telegram 智能问答机器人，采用**AI学习知识库 + 多问题对应同一答案 + 前言内容管理**架构。
 
@@ -257,13 +257,10 @@ https://your-worker.your-subdomain.workers.dev/debug/stats
 
 ## 📝 更新日志
 
-### v4.8 (2026-03-18)
 - 修复统计数据不更新的问题
 - 添加导出导入功能
 - 修复 JavaScript 语法错误
 - 优化响应速度
-
-### v4.7 (之前版本)
 - 添加前言/背景知识管理
 - AI回答时参考前言内容
 - 添加AI配额控制
