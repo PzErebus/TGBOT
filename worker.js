@@ -1,4 +1,4 @@
-// Telegram 智能知识库机器人 v4.8 - 修复版
+// Telegram 智能知识库机器人
 // 移除全局变量缓存，适配 Cloudflare Workers 执行模型
 
 export default {
@@ -20,7 +20,7 @@ const adminHtml = `<!DOCTYPE html>
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8 max-w-6xl">
         <h1 class="text-3xl font-bold mb-8 text-center text-blue-600">
-            <i class="fas fa-robot mr-2"></i>Telegram 知识库机器人管理 v4.8
+            <i class="fas fa-robot mr-2"></i>Telegram 知识库机器人管理
         </h1>
         
         <!-- 统计信息 -->
@@ -126,6 +126,8 @@ const adminHtml = `<!DOCTYPE html>
             </div>
         </div>
 
+
+
         <!-- 知识库管理 -->
         <div class="bg-white rounded-lg shadow mb-8">
             <div class="p-6 border-b flex justify-between items-center">
@@ -225,8 +227,8 @@ const adminHtml = `<!DOCTYPE html>
             <input type="hidden" id="editAnswerId">
             <div class="space-y-4">
                 <div>
-                    <label class="block text-gray-700 mb-2">答案内容</label>
-                    <textarea id="answer" rows="4" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                    <label class="block text-gray-700 mb-2">答案内容（每行一个，机器人会随机选择一个回复）</label>
+                    <textarea id="answer" rows="4" placeholder="本服无白名单。&#10;哪里来的白名单。你给我啊？&#10;没有白名单这个东西。" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
                 </div>
                 <div>
                     <label class="block text-gray-700 mb-2">问题变体（每行一个）</label>
@@ -256,9 +258,11 @@ const adminHtml = `<!DOCTYPE html>
             <h3 class="text-xl font-semibold mb-4">批量导入知识</h3>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-gray-700 mb-2">导入格式（每行：问题1|问题2|... = 答案）</label>
+                    <label class="block text-gray-700 mb-2">导入格式（每行：问题1|问题2|... = 答案1||答案2||...）</label>
                     <textarea id="batchData" rows="12" placeholder="怎么联系客服|客服电话是多少|如何联系你们 = 您可以通过以下方式联系我们：电话 400-123-4567，邮箱 support@example.com
-价格是多少|多少钱 = 我们的产品价格从99元起，具体请查看官网" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"></textarea>
+价格是多少|多少钱 = 我们的产品价格从99元起||具体价格请查看官网||可以联系客服咨询详细价格
+白名单 = 本服无白名单。||哪里来的白名单。你给我啊？||没有白名单这个东西。" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"></textarea>
+                    <p class="text-xs text-gray-500 mt-2">提示：多个答案用 || 分隔，机器人会随机选择一个回复</p>
                 </div>
             </div>
             <div class="mt-6 flex justify-end space-x-3">
@@ -349,11 +353,15 @@ const adminHtml = `<!DOCTYPE html>
                 list.innerHTML = filtered.map(item => {
                     const questionsHtml = item.questions.map(q => '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">' + escapeHtml(q) + '</span>').join('');
                     const categoryHtml = item.category ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded mr-2">' + escapeHtml(item.category) + '</span>' : '';
+                    // 多答案显示
+                    const answers = item.answers || [item.answer];
+                    const answersHtml = answers.map((a, idx) => '<div class="text-sm text-gray-600 mt-1 bg-gray-50 p-2 rounded"><span class="text-xs text-gray-400">[' + (idx + 1) + ']</span> ' + escapeHtml(a) + '</div>').join('');
+                    const answerCountBadge = answers.length > 1 ? '<span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded ml-2">' + answers.length + '个答案</span>' : '';
                     return '<div class="border rounded-lg p-4 hover:bg-gray-50">' +
                         '<div class="flex justify-between items-start">' +
                             '<div class="flex-1">' +
-                                '<div class="mb-2">' + categoryHtml + questionsHtml + '</div>' +
-                                '<div class="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded">' + escapeHtml(item.answer) + '</div>' +
+                                '<div class="mb-2">' + categoryHtml + questionsHtml + answerCountBadge + '</div>' +
+                                '<div class="mt-2">' + answersHtml + '</div>' +
                             '</div>' +
                             '<div class="ml-4 space-x-2">' +
                                 '<button onclick="editKnowledge(' + item.id + ')" class="text-blue-500 hover:text-blue-700"><i class="fas fa-edit"></i></button>' +
@@ -381,7 +389,7 @@ const adminHtml = `<!DOCTYPE html>
         async function saveKnowledge() {
             const editId = document.getElementById('editAnswerId').value;
             const data = {
-                answer: document.getElementById('answer').value.trim(),
+                answers: document.getElementById('answer').value.split('\\n').map(a => a.trim()).filter(a => a),
                 questions: document.getElementById('questions').value.split('\\n').map(q => q.trim()).filter(q => q),
                 category: document.getElementById('category').value.trim(),
                 keywords: document.getElementById('keywords').value.trim()
@@ -430,7 +438,9 @@ const adminHtml = `<!DOCTYPE html>
                 const data = await res.json();
                 document.getElementById('modalTitle').textContent = '编辑知识';
                 document.getElementById('editAnswerId').value = id;
-                document.getElementById('answer').value = data.answer;
+                // 支持多答案，用换行分隔
+                const answers = data.answers || [data.answer];
+                document.getElementById('answer').value = answers.join('\\n');
                 document.getElementById('questions').value = data.questions.join('\\n');
                 document.getElementById('category').value = data.category || '';
                 document.getElementById('keywords').value = data.keywords || '';
@@ -510,13 +520,14 @@ const adminHtml = `<!DOCTYPE html>
                 const parts = line.split('=');
                 if (parts.length === 2) {
                     const questions = parts[0].split('|').map(q => q.replace(/"/g, '').trim()).filter(q => q);
-                    const answer = parts[1].trim();
-                    if (questions.length > 0 && answer) {
+                    // 支持多答案，用 || 分隔
+                    const answers = parts[1].split('||').map(a => a.trim()).filter(a => a);
+                    if (questions.length > 0 && answers.length > 0) {
                         try {
                             const res = await fetch('/manage/knowledge', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ answer, questions })
+                                body: JSON.stringify({ answers, questions })
                             });
                             if (res.ok) success++;
                             else failed++;
@@ -1232,7 +1243,7 @@ async function handleTelegramWebhook(request, env) {
       }
       return new Response('OK', { status: 200 });
     }
-    
+
     // 步骤2：在知识库中搜索最匹配的问题
     console.log('Searching knowledge base for:', cleanText);
     const matches = await findBestMatches(env, cleanText, config.maxContextItems || 5);
@@ -1254,6 +1265,9 @@ async function handleTelegramWebhook(request, env) {
         responseText = matches[0].answer;
         answerType = 'kb';
       }
+      
+      // 添加个性化称呼
+      responseText = addPersonalizedGreeting(responseText, userName);
       
       // 发送消息
       console.log('Preparing to send message to Telegram');
@@ -1354,11 +1368,19 @@ async function findBestMatches(env, query, maxResults = 5) {
       return [];
     }
     
-    // 快速路径：直接匹配
+    // 快速路径：直接匹配（收集所有完全匹配的答案）
+    const exactMatches = [];
     for (const item of allQuestions) {
       if (item.question.toLowerCase() === queryLower) {
-        return [{ ...item, similarity: 1.0 }];
+        exactMatches.push({ ...item, similarity: 1.0 });
       }
+    }
+    
+    // 如果有完全匹配，随机选择一个
+    if (exactMatches.length > 0) {
+      console.log('Found', exactMatches.length, 'exact matches, selecting randomly');
+      const randomIndex = Math.floor(Math.random() * exactMatches.length);
+      return [exactMatches[randomIndex]];
     }
     
     // 计算相似度
@@ -1367,21 +1389,15 @@ async function findBestMatches(env, query, maxResults = 5) {
       return { ...item, similarity };
     });
     
+    // 按相似度降序排序
     scored.sort((a, b) => b.similarity - a.similarity);
     
-    // 去重
-    const seenAnswers = new Set();
-    const uniqueMatches = [];
+    // 获取最高相似度
+    const bestSimilarity = scored[0]?.similarity || 0;
+    console.log('Best similarity found:', bestSimilarity);
     
-    for (const item of scored) {
-      if (!seenAnswers.has(item.answer_id)) {
-        seenAnswers.add(item.answer_id);
-        uniqueMatches.push(item);
-        if (uniqueMatches.length >= maxResults) break;
-      }
-    }
-    
-    return uniqueMatches;
+    // 返回排序后的所有结果，让主流程决定阈值
+    return scored;
   } catch (error) {
     console.error('Find matches error:', error);
     return [];
@@ -1532,6 +1548,82 @@ async function generateAIAnswer(env, userQuestion, matches, config) {
     console.error('Generate AI answer error:', error);
     return matches[0].answer;
   }
+}
+
+// ==================== 个性化称呼功能 ====================
+
+// 个性化称呼词库（奶凶风格）
+const NICKNAME_PREFIXES = [
+  '喂，', '嘿，', '哟，', '啊，', '哼，', '啧，', '哎，', '呐，',
+  '诶，', '哈，', '哇，', '嘁，', '切，', '呃，', '嗯，', '嘛，',
+  '喂喂，', '嘿嘿，', '呀呀，', '哼哼，', '啧啧，', '哎呀，', '哎哟，', '我说，'
+];
+
+const NICKNAME_SUFFIXES = [
+  '小笨蛋', '小迷糊', '小懒虫', '小馋猫', '小淘气', '小傻瓜', '小憨憨', '小屁孩',
+  '小机灵鬼', '小捣蛋', '小闹腾', '小磨人精', '小跟班', '小话痨', '小戏精', '小祖宗',
+  '小冤家', '小讨债鬼', '小麻烦精', '小粘人精', '小醋坛子', '小哭包', '小懒猪', '小馋鬼'
+];
+
+// 获取个性化称呼
+function getPersonalizedNickname(userName) {
+  const prefix = NICKNAME_PREFIXES[Math.floor(Math.random() * NICKNAME_PREFIXES.length)];
+  const suffix = NICKNAME_SUFFIXES[Math.floor(Math.random() * NICKNAME_SUFFIXES.length)];
+  return prefix + (userName || '小伙伴') + suffix;
+}
+
+// 为回答添加个性化称呼前缀（奶凶风格）
+function addPersonalizedGreeting(responseText, userName) {
+  const nickname = getPersonalizedNickname(userName);
+  const greetings = [
+    `😤 ${nickname}，听好了！`,
+    `🙄 ${nickname}，这个问题还要问？`,
+    `😒 ${nickname}，看清楚了：`,
+    `😏 ${nickname}，这么简单都不知道？`,
+    `😐 ${nickname}，给你说一次：`,
+    `😑 ${nickname}，记住了啊：`,
+    `🙃 ${nickname}，真是拿你没办法：`,
+    `😶 ${nickname}，自己看吧：`,
+    `😌 ${nickname}，让我告诉你：`,
+    `🤨 ${nickname}，认真听着：`,
+    `😬 ${nickname}，别走神啊：`,
+    `🫤 ${nickname}，就这一次啊：`,
+    `😮‍💨 ${nickname}，叹气...`,
+    `🤦 ${nickname}，扶额...`,
+    `😵‍💫 ${nickname}，晕...`,
+    `🤐 ${nickname}，好吧好吧：`
+  ];
+  const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+
+  const endings = [
+    `💬 还有问题就继续问吧~`,
+    `✨ 记住了没？`,
+    `🎯 明白了吗？`,
+    `💡 懂了吗小迷糊？`,
+    `😌 这下清楚了吧？`,
+    `📝 记在小本本上啊！`,
+    `🤗 不客气啦~`,
+    `😏 下次别再问这个了哈！`,
+    `🙄 再不懂我就...我就再讲一遍！`,
+    `😤 这可是最后一次了啊！`,
+    `🤨 真的记住了？别骗我哦~`,
+    `😒 我讲得这么清楚，再不会打你哦`,
+    `🫠 我的耐心快被你耗光了...`,
+    `🙃 你这个小迷糊，真拿你没办法`,
+    `😮‍💨 叹气...你怎么这么笨呢`,
+    `🤦 扶额...我太难了`,
+    `😵 被你问得头晕...`,
+    `🤐 算了算了，你自己琢磨吧`,
+    `😌 终于讲完了，累死我了`,
+    `🙏 求求你记住吧，别再问了`,
+    `💢 哼！下次自己查！`,
+    `🌟 好了好了，去玩吧小淘气`,
+    `🎉 恭喜你，又学会了一个知识点！`,
+    `🏃 溜了溜了，问别人去吧~`
+  ];
+  const ending = endings[Math.floor(Math.random() * endings.length)];
+
+  return `${greeting}\n${responseText}\n${ending}`;
 }
 
 // 发送Telegram消息
@@ -1703,7 +1795,38 @@ async function getAllKnowledge(env) {
       }
     }
     
-    return jsonResponse(Array.from(answerMap.values()));
+    // 合并相同问题的答案
+    const questionGroups = new Map();
+    for (const item of answerMap.values()) {
+      const questionKey = item.questions.sort().join('|');
+      if (!questionGroups.has(questionKey)) {
+        questionGroups.set(questionKey, {
+          ids: [],
+          answers: [],
+          category: item.category,
+          keywords: item.keywords,
+          questions: item.questions
+        });
+      }
+      questionGroups.get(questionKey).ids.push(item.id);
+      questionGroups.get(questionKey).answers.push(item.answer);
+    }
+    
+    // 转换为最终格式
+    const mergedResults = [];
+    for (const group of questionGroups.values()) {
+      mergedResults.push({
+        id: group.ids[0], // 使用第一个ID作为主ID
+        ids: group.ids,   // 保存所有ID用于编辑
+        answer: group.answers.join('\\n'), // 多个答案用换行分隔显示
+        answers: group.answers, // 答案数组
+        category: group.category,
+        keywords: group.keywords,
+        questions: group.questions
+      });
+    }
+    
+    return jsonResponse(mergedResults);
   } catch (error) {
     return jsonResponse([]);
   }
@@ -1711,17 +1834,33 @@ async function getAllKnowledge(env) {
 
 async function getKnowledge(id, env) {
   try {
+    // 获取当前答案
     const answer = await env.DB.prepare('SELECT * FROM knowledge_answers WHERE id = ?').bind(id).first();
     if (!answer) return jsonResponse({ error: 'Not found' }, 404);
     
+    // 获取当前答案的问题
     const questions = await env.DB.prepare('SELECT question FROM knowledge_questions WHERE answer_id = ? AND enabled = 1').bind(id).all();
+    const questionList = questions.results.map(q => q.question);
+    
+    // 查找所有相同问题的答案
+    const allAnswers = await env.DB.prepare(`
+      SELECT ka.id, ka.answer
+      FROM knowledge_answers ka
+      JOIN knowledge_questions kq ON ka.id = kq.answer_id
+      WHERE kq.question IN (${questionList.map(() => '?').join(',')})
+      AND ka.enabled = 1
+      GROUP BY ka.id
+    `).bind(...questionList).all();
+    
+    const answerList = allAnswers.results.map(a => a.answer);
     
     return jsonResponse({
       id: answer.id,
       answer: answer.answer,
+      answers: answerList,
       category: answer.category,
       keywords: answer.keywords,
-      questions: questions.results.map(q => q.question)
+      questions: questionList
     });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
@@ -1731,40 +1870,53 @@ async function getKnowledge(id, env) {
 async function addKnowledge(request, env) {
   try {
     const body = await request.json();
-    const { answer, questions, category, keywords } = body;
+    const { answers, questions, category, keywords } = body;
     
-    if (!answer || !questions || questions.length === 0) {
-      return jsonResponse({ error: 'answer and questions are required' }, 400);
+    // 兼容旧格式（单答案）
+    const answerList = answers || (body.answer ? [body.answer] : []);
+    
+    if (!answerList || answerList.length === 0 || !questions || questions.length === 0) {
+      return jsonResponse({ error: 'answers and questions are required' }, 400);
     }
     
     // 输入验证
-    if (answer.length > 2000) {
-      return jsonResponse({ error: 'answer too long (max 2000 chars)' }, 400);
+    for (const answer of answerList) {
+      if (answer.length > 2000) {
+        return jsonResponse({ error: 'answer too long (max 2000 chars)' }, 400);
+      }
     }
     if (questions.length > 50) {
       return jsonResponse({ error: 'too many questions (max 50)' }, 400);
     }
     
-    await env.DB.prepare(
-      'INSERT INTO knowledge_answers (answer, category, keywords) VALUES (?, ?, ?)'
-    ).bind(answer, category || '', keywords || '').run();
+    const answerIds = [];
     
-    const lastIdResult = await env.DB.prepare('SELECT last_insert_rowid() as id').first();
-    const answerId = lastIdResult?.id;
-    
-    if (!answerId) {
-      return jsonResponse({ error: 'Failed to get answer ID' }, 500);
-    }
-    
-    for (const question of questions) {
-      if (question.trim()) {
-        await env.DB.prepare(
-          'INSERT INTO knowledge_questions (answer_id, question, keywords) VALUES (?, ?, ?)'
-        ).bind(answerId, question.trim(), keywords || '').run();
+    // 为每个答案创建一条记录
+    for (const answer of answerList) {
+      await env.DB.prepare(
+        'INSERT INTO knowledge_answers (answer, category, keywords) VALUES (?, ?, ?)'
+      ).bind(answer, category || '', keywords || '').run();
+      
+      const lastIdResult = await env.DB.prepare('SELECT last_insert_rowid() as id').first();
+      const answerId = lastIdResult?.id;
+      
+      if (!answerId) {
+        return jsonResponse({ error: 'Failed to get answer ID' }, 500);
+      }
+      
+      answerIds.push(answerId);
+      
+      // 为每个答案添加所有问题
+      for (const question of questions) {
+        if (question.trim()) {
+          await env.DB.prepare(
+            'INSERT INTO knowledge_questions (answer_id, question, keywords) VALUES (?, ?, ?)'
+          ).bind(answerId, question.trim(), keywords || '').run();
+        }
       }
     }
     
-    return jsonResponse({ success: true, id: answerId });
+    return jsonResponse({ success: true, ids: answerIds });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
   }
@@ -1773,14 +1925,24 @@ async function addKnowledge(request, env) {
 async function updateKnowledge(id, request, env) {
   try {
     const body = await request.json();
-    const { answer, questions, category, keywords } = body;
+    const { answers, questions, category, keywords } = body;
     
-    await env.DB.prepare(
-      'UPDATE knowledge_answers SET answer = ?, category = ?, keywords = ? WHERE id = ?'
-    ).bind(answer, category, keywords, id).run();
+    // 兼容旧格式（单答案）
+    const answerList = answers || (body.answer ? [body.answer] : []);
     
+    if (!answerList || answerList.length === 0 || !questions || questions.length === 0) {
+      return jsonResponse({ error: 'answers and questions are required' }, 400);
+    }
+    
+    // 先删除旧的问题关联
     await env.DB.prepare('DELETE FROM knowledge_questions WHERE answer_id = ?').bind(id).run();
     
+    // 更新第一个答案
+    await env.DB.prepare(
+      'UPDATE knowledge_answers SET answer = ?, category = ?, keywords = ? WHERE id = ?'
+    ).bind(answerList[0], category, keywords, id).run();
+    
+    // 为第一个答案添加所有问题
     for (const question of questions) {
       if (question.trim()) {
         await env.DB.prepare(
@@ -1789,7 +1951,30 @@ async function updateKnowledge(id, request, env) {
       }
     }
     
-    return jsonResponse({ success: true });
+    // 如果有更多答案，创建新的答案记录
+    const answerIds = [id];
+    for (let i = 1; i < answerList.length; i++) {
+      await env.DB.prepare(
+        'INSERT INTO knowledge_answers (answer, category, keywords) VALUES (?, ?, ?)'
+      ).bind(answerList[i], category || '', keywords || '').run();
+      
+      const lastIdResult = await env.DB.prepare('SELECT last_insert_rowid() as id').first();
+      const newAnswerId = lastIdResult?.id;
+      
+      if (newAnswerId) {
+        answerIds.push(newAnswerId);
+        // 为新答案添加所有问题
+        for (const question of questions) {
+          if (question.trim()) {
+            await env.DB.prepare(
+              'INSERT INTO knowledge_questions (answer_id, question, keywords) VALUES (?, ?, ?)'
+            ).bind(newAnswerId, question.trim(), keywords || '').run();
+          }
+        }
+      }
+    }
+    
+    return jsonResponse({ success: true, ids: answerIds });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
   }

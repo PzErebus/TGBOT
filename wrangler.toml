@@ -1,17 +1,11 @@
-name = "telegram-bot-test"
+name = "telegram-keyword-bot"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
-# 数据库配置 - 测试环境
+# 数据库配置 - 主数据库（telegram-keywords-db）
 [[d1_databases]]
 binding = "DB"
-database_name = "telegram-bot-db-test"
-database_id = "755aca65-0c72-4cbb-b8e7-990321c4c9f5"
-
-# 数据库配置 - 生产环境（旧数据库）
-[[d1_databases]]
-binding = "DB_OLD"
-database_name = "telegram-bot-db"
+database_name = "telegram-keywords-db"
 database_id = "c73f760d-3be7-4895-8fa7-dff7a1fbbd26"
 
 # AI 绑定
@@ -20,5 +14,5 @@ binding = "AI"
 
 # 环境变量
 [vars]
-TELEGRAM_BOT_TOKEN = "8777194188:AAFfqmcciGdBoCjxqRTNobPM7WoPMqf6W7E"
+TELEGRAM_BOT_TOKEN = "8759840879:AAEYfyNYXYBgw5mrpoHuLYAxecsN_7SIAts"
 ADMIN_TOKEN = "admin"
