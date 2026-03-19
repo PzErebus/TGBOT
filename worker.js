@@ -607,22 +607,31 @@ const adminHtml = `<!DOCTYPE html>
                     });
                 });
                 
-                // 查找重复的答案
+                // 查找重复的答案（支持多答案）
                 const answerMap = new Map();
                 data.forEach(item => {
-                    const key = item.answer.toLowerCase().trim();
-                    if (answerMap.has(key)) {
-                        if (!duplicates.find(d => d.current.id === item.id)) {
-                            duplicates.push({
-                                type: 'answer',
-                                question: item.questions[0],
-                                existing: answerMap.get(key),
-                                current: item
-                            });
+                    // 获取所有答案（支持answers数组或answer字符串）
+                    const answers = item.answers || [item.answer];
+                    answers.forEach(ans => {
+                        if (!ans) return;
+                        const key = ans.toLowerCase().trim();
+                        if (answerMap.has(key)) {
+                            // 避免重复添加同一个item
+                            const alreadyAdded = duplicates.find(d => 
+                                d.current.id === item.id && d.type === 'answer'
+                            );
+                            if (!alreadyAdded) {
+                                duplicates.push({
+                                    type: 'answer',
+                                    question: item.questions[0],
+                                    existing: answerMap.get(key),
+                                    current: item
+                                });
+                            }
+                        } else {
+                            answerMap.set(key, item);
                         }
-                    } else {
-                        answerMap.set(key, item);
-                    }
+                    });
                 });
                 
                 currentDuplicates = duplicates; // 保存查重结果
@@ -1214,6 +1223,19 @@ async function handleTelegramWebhook(request, env) {
     // 移除 @用户名
     let cleanText = messageText.replace(/@\w+/g, '').trim();
     
+    // 检查是否为日常对话（不需要记录和回答）
+    if (isCasualChat(cleanText)) {
+      console.log('Casual chat detected, skipping processing');
+      return new Response('OK', { status: 200 });
+    }
+    
+    // 检查是否为刷屏消息（10秒内重复5次以上）
+    const isSpam = await isSpamMessage(env, cleanText, chatId);
+    if (isSpam) {
+      console.log('Spam message detected, skipping processing');
+      return new Response('OK', { status: 200 });
+    }
+    
     // 步骤1：AI意图识别
     let shouldAnswer = false;
     
@@ -1404,6 +1426,83 @@ async function findBestMatches(env, query, maxResults = 5) {
   }
 }
 
+// 检查消息是否在10秒内重复出现5次以上
+async function isSpamMessage(env, message, chatId) {
+  const messageHash = message.toLowerCase().trim();
+  const timeWindowSeconds = 10;
+  const maxRepeats = 5;
+  
+  try {
+    // 查找该消息在10秒内的记录
+    const existing = await env.DB.prepare(
+      `SELECT id, count, first_seen FROM message_frequency 
+       WHERE message_hash = ? AND chat_id = ? 
+       AND datetime(last_seen) > datetime('now', '-${timeWindowSeconds} seconds')`
+    ).bind(messageHash, chatId).first();
+    
+    if (existing) {
+      // 更新计数
+      const newCount = existing.count + 1;
+      await env.DB.prepare(
+        `UPDATE message_frequency SET count = ?, last_seen = CURRENT_TIMESTAMP 
+         WHERE id = ?`
+      ).bind(newCount, existing.id).run();
+      
+      console.log(`Message repeat count: ${newCount}/${maxRepeats}`);
+      
+      // 如果超过阈值，认为是刷屏
+      if (newCount >= maxRepeats) {
+        console.log('Spam detected: message repeated', newCount, 'times in', timeWindowSeconds, 'seconds');
+        return true;
+      }
+    } else {
+      // 插入新记录
+      await env.DB.prepare(
+        `INSERT INTO message_frequency (message_hash, chat_id, count, first_seen, last_seen) 
+         VALUES (?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      ).bind(messageHash, chatId).run();
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Spam check error:', error);
+    return false; // 出错时允许消息通过
+  }
+}
+
+// 检查是否为日常对话（不需要记录和回答）
+function isCasualChat(message) {
+  const casualWords = [
+    '嗯', '嗯嗯', '好的', '好', '你好', '嗨', '哈喽', 'hello', 'hi', 'hey',
+    '谢谢', '多谢', '感谢', '不客气', '没事', '没关系',
+    '哈哈', '嘿嘿', '呵呵', '嘻嘻', '呵呵呵', '哈哈哈',
+    'ok', 'okay', '行', '可以', '没问题', '对的', '是的',
+    '拜拜', '再见', 'bye', 'goodbye', 'see you',
+    '在吗', '在', '不在', '在的',
+    '哦', '哦哦', '知道了', '明白', '了解', '收到',
+    '早安', '晚安', '早上好', '晚上好', '中午好'
+  ];
+  
+  const messageLower = message.toLowerCase().trim();
+  
+  // 如果消息完全匹配日常词汇，或者是单个标点符号
+  if (casualWords.includes(messageLower)) {
+    return true;
+  }
+  
+  // 如果消息只包含标点符号或空格
+  if (/^[\s\p{P}]*$/u.test(messageLower)) {
+    return true;
+  }
+  
+  // 如果消息长度小于2且不是字母数字
+  if (messageLower.length < 2 && !/[a-z0-9]/i.test(messageLower)) {
+    return true;
+  }
+  
+  return false;
+}
+
 function calculateSimilarity(query, question, keywords) {
   const queryLower = query.toLowerCase().trim();
   const questionLower = question.toLowerCase().trim();
@@ -1478,16 +1577,23 @@ async function generateAIAnswer(env, userQuestion, matches, config) {
       return matches[0].answer;
     }
     
-    // 检查AI配额
+    // 检查AI每日neurons消耗配额（免费额度10000，超过90%即9000时暂停）
+    const FREE_TIER_LIMIT = 10000;
+    const WARNING_THRESHOLD = 0.9; // 90%
+    const MAX_DAILY_NEURONS = Math.floor(FREE_TIER_LIMIT * WARNING_THRESHOLD); // 9000
+    
     const today = new Date().toISOString().split('T')[0];
-    const aiCallsResult = await env.DB.prepare(
-      "SELECT COUNT(*) as count FROM ai_calls WHERE DATE(created_at) = DATE('now')"
+    
+    // 计算今日已使用的neurons
+    const aiUsageResult = await env.DB.prepare(
+      "SELECT COALESCE(SUM(neurons), 0) as total FROM ai_calls WHERE DATE(created_at) = DATE('now')"
     ).first();
     
-    console.log('AI calls today:', aiCallsResult?.count, 'Limit:', config.aiDailyLimit);
+    const todayNeurons = aiUsageResult?.total || 0;
+    console.log('AI neurons used today:', todayNeurons, 'Limit:', MAX_DAILY_NEURONS);
     
-    if ((aiCallsResult?.count || 0) >= (config.aiDailyLimit || 100)) {
-      console.log('AI daily limit reached');
+    if (todayNeurons >= MAX_DAILY_NEURONS) {
+      console.log('AI daily neurons limit reached (90% of free tier), switching to KB answers only');
       return matches[0].answer;
     }
     
@@ -1528,13 +1634,18 @@ async function generateAIAnswer(env, userQuestion, matches, config) {
         max_tokens: 200
       });
       
-      // 记录AI调用
+      // 记录AI调用和neurons消耗
       console.log('Recording AI call to database...');
       try {
+        // 估算neurons消耗（基于输入输出token）
+        const inputTokens = Math.ceil((systemPrompt.length + userQuestion.length) / 4);
+        const outputTokens = Math.ceil((response.response?.length || 0) / 4);
+        const estimatedNeurons = Math.max(100, (inputTokens + outputTokens) * 10); // 基础100 + token消耗
+        
         const insertResult = await env.DB.prepare(
-          'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence) VALUES (?, ?, ?, ?, ?)'
-        ).bind(0, 0, userQuestion, 'answer_generation', 0.9).run();
-        console.log('AI call recorded successfully, result:', insertResult);
+          'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence, neurons) VALUES (?, ?, ?, ?, ?, ?)'
+        ).bind(0, 0, userQuestion, 'answer_generation', 0.9, estimatedNeurons).run();
+        console.log('AI call recorded successfully, neurons:', estimatedNeurons, 'result:', insertResult);
       } catch (err) {
         console.error('Failed to record AI call:', err);
       }
@@ -1693,23 +1804,28 @@ async function getStats(env) {
   try {
     const today = new Date().toISOString().split('T')[0];
     
-    const [kbResult, todayResult, aiCallsResult, totalAiCalls] = await Promise.all([
+    const [kbResult, todayResult, aiCallsResult, aiNeuronsResult] = await Promise.all([
       env.DB.prepare('SELECT COUNT(*) as count FROM knowledge_answers WHERE enabled = 1').first(),
       env.DB.prepare('SELECT answers_today FROM bot_stats WHERE date = ?').bind(today).first(),
-      env.DB.prepare('SELECT COUNT(*) as count FROM ai_calls WHERE DATE(created_at) = ?').bind(today).first(),
-      env.DB.prepare('SELECT COUNT(*) as count FROM ai_calls').first()
+      env.DB.prepare('SELECT COUNT(*) as count FROM ai_calls WHERE DATE(created_at) = DATE("now")').first(),
+      env.DB.prepare('SELECT COALESCE(SUM(neurons), 0) as total FROM ai_calls WHERE DATE(created_at) = DATE("now")').first()
     ]);
     
-    const aiUsage = (totalAiCalls?.count || 0) * 15;
+    const todayNeurons = aiNeuronsResult?.total || 0;
+    const FREE_TIER_LIMIT = 10000;
+    const WARNING_THRESHOLD = 0.9;
+    const MAX_DAILY_NEURONS = Math.floor(FREE_TIER_LIMIT * WARNING_THRESHOLD);
     
     return jsonResponse({
       kbCount: kbResult?.count || 0,
       todayAnswers: todayResult?.answers_today || 0,
       aiCalls: aiCallsResult?.count || 0,
-      aiUsage: aiUsage
+      aiUsage: todayNeurons,
+      aiLimit: MAX_DAILY_NEURONS,
+      aiRemaining: Math.max(0, MAX_DAILY_NEURONS - todayNeurons)
     });
   } catch (error) {
-    return jsonResponse({ kbCount: 0, todayAnswers: 0, aiCalls: 0, aiUsage: 0 });
+    return jsonResponse({ kbCount: 0, todayAnswers: 0, aiCalls: 0, aiUsage: 0, aiLimit: 9000, aiRemaining: 9000 });
   }
 }
 
