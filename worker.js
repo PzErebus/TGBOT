@@ -836,7 +836,7 @@ const adminHtml = `<!DOCTYPE html>
                     return '<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 sm:p-3 bg-gray-50 rounded gap-2 sm:gap-0">' +
                         '<div class="flex-1 w-full sm:w-auto min-w-0">' +
                             '<div class="font-medium text-gray-900 text-sm sm:text-base break-words">' + escapeHtml(item.message) + '</div>' +
-                            '<div class="text-xs sm:text-sm text-gray-500">' + new Date(item.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) + '</div>' +
+                            '<div class="text-xs sm:text-sm text-gray-500">' + (item.beijing_time ? item.beijing_time.replace('T', ' ').substring(0, 19) : '') + '</div>' +
                         '</div>' +
                         '<button onclick="quickAddKnowledge(' + JSON.stringify(item.message).replace(/"/g, '&quot;') + ')" class="sm:ml-4 text-blue-500 hover:text-blue-700 text-xs sm:text-sm whitespace-nowrap flex items-center">' +
                             '<i class="fas fa-plus mr-1"></i><span class="hidden sm:inline">添加知识</span><span class="sm:hidden">添加</span>' +
@@ -1086,14 +1086,43 @@ const adminHtml = `<!DOCTYPE html>
                                 '<div class="text-sm text-gray-600">出现次数: ' + gap.count + '</div>' +
                                 '<div class="text-sm text-yellow-700 mt-1">建议添加: ' + escapeHtml(gap.suggestion) + '</div>' +
                             '</div>' +
-                            '<button onclick="quickAddKnowledge(' + JSON.stringify(gap.message).replace(/"/g, '&quot;') + ')" class="ml-4 text-blue-500 hover:text-blue-700">' +
-                                '<i class="fas fa-plus"></i>' +
-                            '</button>' +
+                            '<div class="flex flex-col gap-2 ml-4">' +
+                                '<button onclick="quickAddKnowledge(' + JSON.stringify(gap.message).replace(/"/g, '&quot;') + ')" class="text-blue-500 hover:text-blue-700" title="添加知识">' +
+                                    '<i class="fas fa-plus"></i>' +
+                                '</button>' +
+                                '<button onclick="adoptGap(' + JSON.stringify(gap.message).replace(/"/g, '&quot;') + ')" class="text-green-500 hover:text-green-700" title="采纳">' +
+                                    '<i class="fas fa-check"></i>' +
+                                '</button>' +
+                            '</div>' +
                         '</div>' +
                     '</div>';
                 }).join('');
             } catch (e) {
                 container.innerHTML = '<div class="text-center py-4 text-red-500">分析失败：' + e.message + '</div>';
+            }
+        }
+
+        // 采纳知识缺口
+        async function adoptGap(message) {
+            if (!confirm('确定要采纳这个问题吗？采纳后将从知识缺口分析中移除。')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch('/manage/gaps/adopt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                if (res.ok) {
+                    analyzeGaps();
+                    loadUnanswered();
+                } else {
+                    alert('采纳失败');
+                }
+            } catch (e) {
+                alert('采纳出错: ' + e.message);
             }
         }
 
@@ -1717,6 +1746,11 @@ async function handleRequest(request, env) {
     if (request.method === 'GET') {
       return await analyzeKnowledgeGaps(env);
     }
+  }
+  
+  // 采纳知识缺口（标记为已处理）
+  if (path === '/manage/gaps/adopt' && request.method === 'POST') {
+    return await adoptGap(request, env);
   }
   
   if (path === '/manage/context') {
@@ -3142,11 +3176,11 @@ async function deleteContext(id, env) {
   }
 }
 
-// 获取未回答问题
+// 获取未回答问题（只显示未采纳的，最多50条）
 async function getUnanswered(env) {
   try {
     const items = await env.DB.prepare(
-      'SELECT * FROM unanswered ORDER BY created_at DESC LIMIT 50'
+      'SELECT *, datetime(created_at, "+8 hours") as beijing_time FROM unanswered WHERE status = 0 ORDER BY created_at DESC LIMIT 50'
     ).all();
     return jsonResponse(items.results || []);
   } catch (error) {
@@ -3154,11 +3188,11 @@ async function getUnanswered(env) {
   }
 }
 
-// 分析知识缺口
+// 分析知识缺口（只显示未采纳的，最多5条）
 async function analyzeKnowledgeGaps(env) {
   try {
     const items = await env.DB.prepare(
-      'SELECT message, COUNT(*) as count FROM unanswered GROUP BY message ORDER BY count DESC LIMIT 20'
+      'SELECT message, COUNT(*) as count FROM unanswered WHERE status = 0 GROUP BY message ORDER BY count DESC LIMIT 5'
     ).all();
     
     const gaps = (items.results || []).map(item => ({
@@ -3170,5 +3204,26 @@ async function analyzeKnowledgeGaps(env) {
     return jsonResponse({ gaps });
   } catch (error) {
     return jsonResponse({ gaps: [] });
+  }
+}
+
+// 采纳知识缺口（标记为已处理）
+async function adoptGap(request, env) {
+  try {
+    const body = await request.json();
+    const { message } = body;
+    
+    if (!message) {
+      return jsonResponse({ error: 'message is required' }, 400);
+    }
+    
+    // 将所有匹配的未回答问题标记为已采纳
+    await env.DB.prepare(
+      'UPDATE unanswered SET status = 1 WHERE message = ? AND status = 0'
+    ).bind(message).run();
+    
+    return jsonResponse({ success: true });
+  } catch (error) {
+    return jsonResponse({ error: error.message }, 500);
   }
 }

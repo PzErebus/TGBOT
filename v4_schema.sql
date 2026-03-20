@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS unanswered (
   message TEXT NOT NULL,
   chat_type TEXT,
   ai_classified INTEGER DEFAULT 0,
+  status INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -109,6 +110,9 @@ CREATE TABLE IF NOT EXISTS message_frequency (
   first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 为现有 unanswered 表添加 status 列（如果不存在）
+ALTER TABLE unanswered ADD COLUMN IF NOT EXISTS status INTEGER DEFAULT 0;
 
 -- 统计表
 CREATE TABLE IF NOT EXISTS bot_stats (
