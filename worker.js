@@ -2696,21 +2696,21 @@ async function getChartData(env) {
 
     // 热门问题 TOP5
     const hotQuestions = await env.DB.prepare(`
-      SELECT message as question, COUNT(*) as count 
+      SELECT question, COUNT(*) as count 
       FROM answers 
       WHERE created_at >= datetime('now', '-7 days')
-      GROUP BY message 
+      GROUP BY question 
       ORDER BY count DESC 
       LIMIT 5
     `).all();
 
-    // AI vs 知识库来源统计
+    // AI vs 知识库来源统计（近7天）
     const sourceStats = await env.DB.prepare(`
       SELECT 
-        SUM(CASE WHEN source = 'ai' THEN 1 ELSE 0 END) as ai_count,
-        SUM(CASE WHEN source = 'knowledge_base' THEN 1 ELSE 0 END) as kb_count
+        COALESCE(SUM(CASE WHEN answer_type = 'ai' THEN 1 ELSE 0 END), 0) as ai_count,
+        COALESCE(SUM(CASE WHEN answer_type = 'kb' THEN 1 ELSE 0 END), 0) as kb_count
       FROM answers 
-      WHERE DATE(created_at) = DATE('now')
+      WHERE created_at >= datetime('now', '-7 days')
     `).first();
 
     return jsonResponse({
