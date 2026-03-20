@@ -16,3 +16,4 @@ binding = "AI"
 [vars]
 TELEGRAM_BOT_TOKEN = "8759840879:AAEYfyNYXYBgw5mrpoHuLYAxecsN_7SIAts"
 ADMIN_TOKEN = "admin"
+USER_TOKEN = "user"

@@ -1786,8 +1786,9 @@ async function handleLogin(request, env) {
     const body = await request.json();
     const { username, password } = body;
     
-    // 获取管理员密码
+    // 从环境变量获取密码
     const adminPassword = env.ADMIN_TOKEN || 'admin';
+    const userPassword = env.USER_TOKEN || 'user';
     
     // 验证用户
     if (username === 'admin' && password === adminPassword) {
@@ -1798,7 +1799,7 @@ async function handleLogin(request, env) {
         role: 'admin',
         username: 'admin'
       });
-    } else if (username === 'user' && password === 'user') {
+    } else if (username === 'user' && password === userPassword) {
       const token = 'user_' + Date.now() + '_' + Math.random().toString(36).substring(2);
       return jsonResponse({
         success: true,
