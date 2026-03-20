@@ -1,5 +1,5 @@
 // Telegram 智能知识库机器人
-// v4.11.0 - 添加用户权限系统
+// v4.13.0 - 添加AI回复记录和纠正功能
 // 移除全局变量缓存，适配 Cloudflare Workers 执行模型
 
 export default {
@@ -433,6 +433,21 @@ const adminHtml = `<!DOCTYPE html>
             </div>
         </div>
 
+        <!-- AI回复记录 -->
+        <div id="aiResponses" class="bg-white rounded-lg shadow mb-4 md:mb-8">
+            <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+                <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-robot mr-2"></i>AI回复记录</h2>
+                <button onclick="loadAIResponses()" class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
+                    <i class="fas fa-sync mr-1 md:mr-2"></i>刷新
+                </button>
+            </div>
+            <div class="p-4 md:p-6">
+                <div id="aiResponsesList" class="space-y-2 max-h-64 md:max-h-96 overflow-y-auto pr-2">
+                    <div class="text-center py-8 text-gray-500">加载中...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- 操作日志 -->
         <div id="logs" class="admin-only bg-white rounded-lg shadow">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
@@ -453,6 +468,42 @@ const adminHtml = `<!DOCTYPE html>
             <div class="p-4 md:p-6">
                 <div id="operationLogsList" class="space-y-2 max-h-64 overflow-y-auto pr-2">
                     <div class="text-center py-8 text-gray-500">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI回复纠正模态框 -->
+    <div id="correctModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-2 sm:p-4">
+        <div class="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full mx-0 sm:mx-4 max-h-[95vh] sm:max-h-screen overflow-y-auto">
+            <h3 class="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">纠正AI回复</h3>
+            <input type="hidden" id="correctId">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 mb-2 text-sm font-medium">用户问题</label>
+                    <div id="correctQuestion" class="p-3 bg-gray-50 rounded-lg text-gray-800"></div>
+                </div>
+                <div>
+                    <label class="block text-gray-700 mb-2 text-sm font-medium">AI原回答</label>
+                    <div id="correctOriginal" class="p-3 bg-yellow-50 rounded-lg text-gray-800 border border-yellow-200"></div>
+                </div>
+                <div>
+                    <label class="block text-gray-700 mb-2 text-sm font-medium">纠正后的回答</label>
+                    <textarea id="correctAnswer" rows="4" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="请输入正确的回答..."></textarea>
+                </div>
+                <div class="flex items-center">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="addToKnowledge" class="w-4 h-4 text-purple-600 rounded">
+                        <span class="text-gray-700 text-sm">同时添加到知识库</span>
+                    </label>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 pt-4">
+                    <button onclick="submitCorrection()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg transition">
+                        <i class="fas fa-check mr-2"></i>保存纠正
+                    </button>
+                    <button onclick="closeCorrectModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg transition">
+                        取消
+                    </button>
                 </div>
             </div>
         </div>
@@ -1064,6 +1115,118 @@ const adminHtml = `<!DOCTYPE html>
             }
         }
 
+        // AI回复记录
+        async function loadAIResponses() {
+            try {
+                const res = await fetch('/manage/ai-responses');
+                const items = await res.json();
+                const list = document.getElementById('aiResponsesList');
+                
+                if (items.length === 0) {
+                    list.innerHTML = '<div class="text-center py-8 text-gray-500">暂无AI回复记录</div>';
+                    return;
+                }
+                
+                list.innerHTML = items.map(item => {
+                    const statusBadge = item.is_corrected 
+                        ? '<span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">已纠正</span>'
+                        : '<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">待审核</span>';
+                    
+                    return '<div class="border rounded-lg p-3 ' + (item.is_corrected ? 'bg-green-50 border-green-200' : 'bg-white') + '">' +
+                        '<div class="flex flex-col sm:flex-row justify-between items-start gap-2">' +
+                            '<div class="flex-1 min-w-0">' +
+                                '<div class="flex items-center gap-2 mb-1">' +
+                                    '<span class="font-medium text-gray-900 text-sm">' + escapeHtml(item.question || '') + '</span>' +
+                                    statusBadge +
+                                '</div>' +
+                                '<div class="text-xs text-gray-500 mb-2">' + (item.beijing_time || '') + '</div>' +
+                                '<div class="text-sm text-gray-700 bg-gray-50 p-2 rounded">' +
+                                    '<strong>AI回答:</strong> ' + escapeHtml(item.original_answer || '') +
+                                '</div>' +
+                                (item.corrected_answer ? '<div class="text-sm text-green-700 bg-green-50 p-2 rounded mt-2"><strong>纠正后:</strong> ' + escapeHtml(item.corrected_answer) + '</div>' : '') +
+                            '</div>' +
+                            '<div class="flex gap-2">' +
+                                '<button onclick="showCorrectModal(' + item.id + ')" class="text-purple-500 hover:text-purple-700 text-sm" title="纠正">' +
+                                    '<i class="fas fa-edit mr-1"></i>纠正' +
+                                '</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            } catch (e) {
+                document.getElementById('aiResponsesList').innerHTML = '<div class="text-center text-red-500">加载失败: ' + e.message + '</div>';
+            }
+        }
+
+        // 显示纠正模态框
+        async function showCorrectModal(id) {
+            try {
+                const res = await fetch('/manage/ai-responses/' + id);
+                const item = await res.json();
+                
+                if (item.error) {
+                    alert('获取记录失败: ' + item.error);
+                    return;
+                }
+                
+                document.getElementById('correctId').value = id;
+                document.getElementById('correctQuestion').textContent = item.question || '';
+                document.getElementById('correctOriginal').textContent = item.original_answer || '';
+                document.getElementById('correctAnswer').value = item.corrected_answer || '';
+                document.getElementById('addToKnowledge').checked = false;
+                
+                document.getElementById('correctModal').classList.remove('hidden');
+                document.getElementById('correctModal').classList.add('flex');
+            } catch (e) {
+                alert('获取记录失败: ' + e.message);
+            }
+        }
+
+        // 关闭纠正模态框
+        function closeCorrectModal() {
+            document.getElementById('correctModal').classList.add('hidden');
+            document.getElementById('correctModal').classList.remove('flex');
+        }
+
+        // 提交纠正
+        async function submitCorrection() {
+            const id = document.getElementById('correctId').value;
+            const correctedAnswer = document.getElementById('correctAnswer').value.trim();
+            const addToKnowledge = document.getElementById('addToKnowledge').checked;
+            
+            if (!correctedAnswer) {
+                alert('请输入纠正后的回答');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/manage/ai-responses/correct', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: parseInt(id),
+                        corrected_answer: correctedAnswer,
+                        add_to_knowledge: addToKnowledge
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    alert('纠正成功' + (addToKnowledge ? '，已添加到知识库' : ''));
+                    closeCorrectModal();
+                    loadAIResponses();
+                    if (addToKnowledge) {
+                        loadKnowledgeBase();
+                    }
+                } else {
+                    alert('纠正失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('纠正出错: ' + e.message);
+            }
+        }
+
         // 知识缺口分析
         async function analyzeGaps() {
             const container = document.getElementById('gapsContainer');
@@ -1646,6 +1809,7 @@ const adminHtml = `<!DOCTYPE html>
             }
             loadKnowledgeBase();
             loadUnanswered();
+            loadAIResponses();
             loadContext();
             if (currentUserRole === 'admin') {
                 loadCharts();
@@ -1751,6 +1915,27 @@ async function handleRequest(request, env) {
   // 采纳知识缺口（标记为已处理）
   if (path === '/manage/gaps/adopt' && request.method === 'POST') {
     return await adoptGap(request, env);
+  }
+  
+  // AI回复记录
+  if (path === '/manage/ai-responses') {
+    if (request.method === 'GET') {
+      return await getAIResponses(env);
+    }
+  }
+  
+  // AI回复纠正
+  if (path === '/manage/ai-responses/correct' && request.method === 'POST') {
+    return await correctAIResponse(request, env);
+  }
+  
+  // AI回复详情
+  const aiResponseMatch = path.match(/^\/manage\/ai-responses\/(\d+)$/);
+  if (aiResponseMatch) {
+    const id = parseInt(aiResponseMatch[1]);
+    if (request.method === 'GET') {
+      return await getAIResponseDetail(id, env);
+    }
   }
   
   if (path === '/manage/context') {
@@ -2070,11 +2255,23 @@ async function handleTelegramWebhook(request, env) {
       console.log('Sending response with similarity:', matches[0].similarity);
       let responseText;
       let answerType;
+      let aiResponseId = null;
       
       if (config.useAIAnswer !== false && matches[0].similarity < 0.7) {
         // 使用AI生成答案
         responseText = await generateAIAnswer(env, cleanText, matches, config);
         answerType = 'ai';
+        
+        // 记录AI回复
+        try {
+          const aiRecordResult = await env.DB.prepare(
+            'INSERT INTO ai_responses (chat_id, user_id, user_name, question, original_answer, answer_type, similarity, knowledge_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(chatId, userId, userName, cleanText, responseText, 'ai', matches[0].similarity, matches[0].answerId).run();
+          aiResponseId = aiRecordResult.meta.last_row_id;
+          console.log('AI response recorded, id:', aiResponseId);
+        } catch (err) {
+          console.error('Failed to record AI response:', err);
+        }
       } else {
         // 直接使用知识库答案
         responseText = matches[0].answer;
@@ -3224,6 +3421,92 @@ async function adoptGap(request, env) {
     
     return jsonResponse({ success: true });
   } catch (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+// 获取AI回复记录
+async function getAIResponses(env) {
+  try {
+    const items = await env.DB.prepare(
+      "SELECT *, datetime(created_at, '+8 hours') as beijing_time FROM ai_responses ORDER BY created_at DESC LIMIT 100"
+    ).all();
+    return jsonResponse(items.results || []);
+  } catch (error) {
+    console.error('Get AI responses error:', error);
+    return jsonResponse([]);
+  }
+}
+
+// 获取AI回复详情
+async function getAIResponseDetail(id, env) {
+  try {
+    const item = await env.DB.prepare(
+      "SELECT *, datetime(created_at, '+8 hours') as beijing_time FROM ai_responses WHERE id = ?"
+    ).bind(id).first();
+    
+    if (!item) {
+      return jsonResponse({ error: 'Not found' }, 404);
+    }
+    
+    return jsonResponse(item);
+  } catch (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+// 纠正AI回复
+async function correctAIResponse(request, env) {
+  try {
+    const body = await request.json();
+    const { id, corrected_answer, add_to_knowledge } = body;
+    
+    if (!id || !corrected_answer) {
+      return jsonResponse({ error: 'id and corrected_answer are required' }, 400);
+    }
+    
+    // 获取原始记录
+    const original = await env.DB.prepare(
+      'SELECT * FROM ai_responses WHERE id = ?'
+    ).bind(id).first();
+    
+    if (!original) {
+      return jsonResponse({ error: 'Record not found' }, 404);
+    }
+    
+    // 更新纠正后的答案
+    await env.DB.prepare(
+      'UPDATE ai_responses SET corrected_answer = ?, is_corrected = 1, corrected_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(corrected_answer, id).run();
+    
+    // 如果选择添加到知识库
+    if (add_to_knowledge) {
+      // 先添加答案
+      const answerResult = await env.DB.prepare(
+        'INSERT INTO knowledge_answers (answer, category, enabled) VALUES (?, ?, 1)'
+      ).bind(corrected_answer, 'AI纠正').run();
+      
+      const answerId = answerResult.meta.last_row_id;
+      
+      // 再添加问题
+      await env.DB.prepare(
+        'INSERT INTO knowledge_questions (answer_id, question, enabled) VALUES (?, ?, 1)'
+      ).bind(answerId, original.question).run();
+      
+      // 更新AI回复记录，关联知识库ID
+      await env.DB.prepare(
+        'UPDATE ai_responses SET knowledge_id = ? WHERE id = ?'
+      ).bind(answerId, id).run();
+    }
+    
+    // 记录操作日志
+    await env.DB.prepare(
+      'INSERT INTO operation_logs (operation_type, operation_desc, details) VALUES (?, ?, ?)'
+    ).bind('correct', '纠正AI回复', JSON.stringify({ id, question: original.question, original: original.original_answer, corrected: corrected_answer })).run();
+    
+    return jsonResponse({ success: true });
+  } catch (error) {
+    console.error('Correct AI response error:', error);
     return jsonResponse({ error: error.message }, 500);
   }
 }

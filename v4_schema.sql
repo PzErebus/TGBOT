@@ -1,5 +1,5 @@
--- Telegram 智能知识库机器人 v4.11 数据库结构
--- 功能：AI学习知识库回答 + 多问题对应同一答案 + 前言内容管理 + 智能防刷屏 + 用户权限系统
+-- Telegram 智能知识库机器人 v4.13 数据库结构
+-- 功能：AI学习知识库回答 + 多问题对应同一答案 + 前言内容管理 + 智能防刷屏 + 用户权限系统 + AI回复纠正
 -- 时间格式：UTC 存储，北京时间显示 (Asia/Shanghai)
 
 -- 机器人配置表
@@ -70,22 +70,28 @@ CREATE TABLE IF NOT EXISTS ai_calls (
   message TEXT NOT NULL,
   intent TEXT,
   confidence REAL,
+  neurons INTEGER DEFAULT 0,
   prompt_tokens INTEGER,
   response_tokens INTEGER,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 回答记录表
-CREATE TABLE IF NOT EXISTS answers (
+-- AI回复记录表（支持纠正功能）
+CREATE TABLE IF NOT EXISTS ai_responses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   chat_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
   user_name TEXT,
   question TEXT NOT NULL,
-  answer TEXT NOT NULL,
-  answer_type TEXT DEFAULT 'kb',
+  original_answer TEXT NOT NULL,
+  corrected_answer TEXT,
+  is_corrected INTEGER DEFAULT 0,
+  answer_type TEXT DEFAULT 'ai',
   similarity REAL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  knowledge_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  corrected_at DATETIME,
+  FOREIGN KEY (knowledge_id) REFERENCES knowledge_answers(id)
 );
 
 -- 未回答问题表
@@ -111,9 +117,6 @@ CREATE TABLE IF NOT EXISTS message_frequency (
   last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 为现有 unanswered 表添加 status 列（如果不存在）
-ALTER TABLE unanswered ADD COLUMN IF NOT EXISTS status INTEGER DEFAULT 0;
-
 -- 统计表
 CREATE TABLE IF NOT EXISTS bot_stats (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,14 +126,6 @@ CREATE TABLE IF NOT EXISTS bot_stats (
   ai_calls_today INTEGER DEFAULT 0,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- 插入默认配置
-INSERT OR IGNORE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items, ai_daily_limit) 
-VALUES (1, 1, 0, 1, 1, 0.6, 5, 100);
-
--- 插入今天的统计记录
-INSERT OR IGNORE INTO bot_stats (date, answers_today, total_answers, ai_calls_today) 
-VALUES (DATE('now'), 0, 0, 0);
 
 -- 操作日志表
 CREATE TABLE IF NOT EXISTS operation_logs (
@@ -143,11 +138,21 @@ CREATE TABLE IF NOT EXISTS operation_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 插入默认配置
+INSERT OR IGNORE INTO bot_config (id, bot_enabled, only_mentioned, use_ai_classifier, use_ai_answer, similarity_threshold, max_context_items, ai_daily_limit) 
+VALUES (1, 1, 0, 1, 1, 0.6, 5, 100);
+
+-- 插入今天的统计记录
+INSERT OR IGNORE INTO bot_stats (date, answers_today, total_answers, ai_calls_today) 
+VALUES (DATE('now'), 0, 0, 0);
+
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_ai_calls_created_at ON ai_calls(created_at);
-CREATE INDEX IF NOT EXISTS idx_answers_chat_id ON answers(chat_id);
+CREATE INDEX IF NOT EXISTS idx_ai_responses_chat_id ON ai_responses(chat_id);
+CREATE INDEX IF NOT EXISTS idx_ai_responses_created_at ON ai_responses(created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_responses_corrected ON ai_responses(is_corrected);
 CREATE INDEX IF NOT EXISTS idx_unanswered_ai_classified ON unanswered(ai_classified);
 CREATE INDEX IF NOT EXISTS idx_knowledge_answers_enabled ON knowledge_answers(enabled);
 CREATE INDEX IF NOT EXISTS idx_knowledge_questions_answer_id ON knowledge_questions(answer_id);
