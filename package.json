@@ -1,6 +1,6 @@
 {
   "name": "telegram-knowledge-bot",
-  "version": "4.11.0",
+  "version": "4.12.0",
   "description": "Telegram 智能知识库机器人 - 基于 Cloudflare Workers + D1 数据库 + AI，支持用户权限管理",
   "main": "worker.js",
   "scripts": {
