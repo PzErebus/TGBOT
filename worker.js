@@ -2986,8 +2986,22 @@ async function updateKnowledge(id, request, env) {
       return jsonResponse({ error: 'answers and questions are required' }, 400);
     }
     
-    // 先删除旧的问题关联
-    await env.DB.prepare('DELETE FROM knowledge_questions WHERE answer_id = ?').bind(id).run();
+    // 获取该答案组的所有相关答案ID
+    const existingAnswers = await env.DB.prepare(
+      'SELECT id FROM knowledge_answers WHERE id = ? OR id IN (SELECT answer_id FROM knowledge_questions WHERE question IN (SELECT question FROM knowledge_questions WHERE answer_id = ?))'
+    ).bind(id, id).all();
+    
+    const existingIds = existingAnswers.results?.map(r => r.id) || [id];
+    
+    // 删除所有旧的问题关联
+    for (const answerId of existingIds) {
+      await env.DB.prepare('DELETE FROM knowledge_questions WHERE answer_id = ?').bind(answerId).run();
+    }
+    
+    // 删除多余的旧答案记录（保留第一个用于更新）
+    for (let i = 1; i < existingIds.length; i++) {
+      await env.DB.prepare('DELETE FROM knowledge_answers WHERE id = ?').bind(existingIds[i]).run();
+    }
     
     // 更新第一个答案
     await env.DB.prepare(
