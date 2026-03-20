@@ -1,4 +1,5 @@
 // Telegram 智能知识库机器人
+// v4.11.0 - 添加用户权限系统
 // 移除全局变量缓存，适配 Cloudflare Workers 执行模型
 
 export default {
@@ -6,6 +7,121 @@ export default {
     return await handleRequest(request, env);
   }
 };
+
+// 登录页面
+const loginHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - Telegram 知识库机器人</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .dark body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full mb-4">
+                <i class="fas fa-robot text-3xl text-blue-600 dark:text-blue-400"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Telegram 知识库机器人</h1>
+            <p class="text-gray-500 dark:text-gray-400 mt-2">请登录以访问管理面板</p>
+        </div>
+        
+        <form id="loginForm" class="space-y-6">
+            <div>
+                <label class="block text-gray-700 dark:text-gray-300 mb-2">用户名</label>
+                <div class="relative">
+                    <i class="fas fa-user absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" id="username" required
+                        class="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="请输入用户名">
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-gray-700 dark:text-gray-300 mb-2">密码</label>
+                <div class="relative">
+                    <i class="fas fa-lock absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="password" id="password" required
+                        class="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="请输入密码">
+                </div>
+            </div>
+            
+            <div id="errorMsg" class="hidden text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
+                <i class="fas fa-exclamation-circle mr-2"></i><span id="errorText"></span>
+            </div>
+            
+            <button type="submit" id="loginBtn"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center">
+                <i class="fas fa-sign-in-alt mr-2"></i>登录
+            </button>
+        </form>
+        
+        <div class="mt-6 text-center text-gray-500 dark:text-gray-400 text-sm">
+            <p><i class="fas fa-info-circle mr-1"></i>普通用户: user / user</p>
+            <p class="mt-1"><i class="fas fa-shield-alt mr-1"></i>管理员: admin / 请联系管理员</p>
+        </div>
+    </div>
+    
+    <script>
+        // 初始化主题
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.documentElement.classList.add('dark');
+        }
+        
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const errorMsg = document.getElementById('errorMsg');
+            const errorText = document.getElementById('errorText');
+            
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>登录中...';
+            errorMsg.classList.add('hidden');
+            
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('userRole', data.role);
+                    localStorage.setItem('username', data.username);
+                    window.location.href = '/manage';
+                } else {
+                    errorText.textContent = data.error || '登录失败';
+                    errorMsg.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorText.textContent = '网络错误，请重试';
+                errorMsg.classList.remove('hidden');
+            }
+            
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>登录';
+        });
+    </script>
+</body>
+</html>`;
 
 // HTML 管理界面
 const adminHtml = `<!DOCTYPE html>
@@ -69,6 +185,25 @@ const adminHtml = `<!DOCTYPE html>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-3 py-4 md:px-4 md:py-8 max-w-6xl">
+        <!-- 用户信息栏 -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-4 p-3 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-user-circle text-2xl text-blue-500"></i>
+                <div>
+                    <span class="font-medium text-gray-800 dark:text-white" id="currentUsername">-</span>
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded" id="userRoleBadge">-</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="toggleTheme()" id="themeToggle" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-2 py-1.5 md:px-3 md:py-2 rounded-lg transition text-sm" title="切换主题">
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                </button>
+                <button onclick="logout()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg transition text-sm">
+                    <i class="fas fa-sign-out-alt mr-1"></i>退出
+                </button>
+            </div>
+        </div>
+        
         <!-- 移动端优化后的头部 -->
         <div class="flex justify-between items-center mb-4 md:mb-8">
             <div class="flex items-center gap-2">
@@ -80,16 +215,13 @@ const adminHtml = `<!DOCTYPE html>
                 <i class="fas fa-robot mr-1 md:mr-2"></i><span class="hidden sm:inline">Telegram 知识库机器人管理</span><span class="sm:hidden">TG机器人</span>
             </h1>
             <div class="flex items-center gap-2">
-                <button onclick="toggleTheme()" id="themeToggle" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-2 py-1.5 md:px-3 md:py-2 rounded-lg transition text-sm md:text-base" title="切换主题">
-                    <i class="fas fa-moon" id="themeIcon"></i>
-                </button>
             </div>
         </div>
         
         <!-- 移动端导航菜单 -->
         <div id="mobileMenu" class="hidden sm:hidden mb-4 bg-white dark:bg-gray-800 rounded-lg shadow p-3">
             <div class="grid grid-cols-2 gap-2 text-sm">
-                <a href="#config" onclick="scrollToSection('config'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                <a href="#config" onclick="scrollToSection('config'); return false;" class="admin-only p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
                     <i class="fas fa-cog mr-1"></i>配置
                 </a>
                 <a href="#context" onclick="scrollToSection('context'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
@@ -101,10 +233,10 @@ const adminHtml = `<!DOCTYPE html>
                 <a href="#unanswered" onclick="scrollToSection('unanswered'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
                     <i class="fas fa-question-circle mr-1"></i>未回答
                 </a>
-                <a href="#stats" onclick="scrollToSection('stats'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                <a href="#stats" onclick="scrollToSection('stats'); return false;" class="admin-only p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
                     <i class="fas fa-chart-bar mr-1"></i>统计
                 </a>
-                <a href="#logs" onclick="scrollToSection('logs'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                <a href="#logs" onclick="scrollToSection('logs'); return false;" class="admin-only p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
                     <i class="fas fa-history mr-1"></i>日志
                 </a>
             </div>
@@ -152,7 +284,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 配置面板 -->
-        <div id="config" class="bg-white rounded-lg shadow mb-4 md:mb-8">
+        <div id="config" class="admin-only bg-white rounded-lg shadow mb-4 md:mb-8">
             <div class="p-4 md:p-6 border-b">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-cog mr-2"></i>机器人配置</h2>
             </div>
@@ -257,7 +389,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 数据统计图表 -->
-        <div id="stats" class="bg-white rounded-lg shadow mb-4 md:mb-8">
+        <div id="stats" class="admin-only bg-white rounded-lg shadow mb-4 md:mb-8">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-chart-bar mr-2"></i>数据统计</h2>
                 <button onclick="loadCharts()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
@@ -302,7 +434,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 操作日志 -->
-        <div id="logs" class="bg-white rounded-lg shadow">
+        <div id="logs" class="admin-only bg-white rounded-lg shadow">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-history mr-2"></i>操作日志</h2>
                 <div class="flex gap-2">
@@ -1254,6 +1386,57 @@ const adminHtml = `<!DOCTYPE html>
             });
         }
 
+        // 用户权限控制
+        let currentUserRole = 'user';
+        
+        function checkAuth() {
+            const token = localStorage.getItem('authToken');
+            const role = localStorage.getItem('userRole');
+            const username = localStorage.getItem('username');
+            
+            if (!token) {
+                window.location.href = '/login';
+                return false;
+            }
+            
+            currentUserRole = role || 'user';
+            
+            // 更新用户信息显示
+            document.getElementById('currentUsername').textContent = username || '未知用户';
+            const roleBadge = document.getElementById('userRoleBadge');
+            if (currentUserRole === 'admin') {
+                roleBadge.textContent = '管理员';
+                roleBadge.className = 'ml-2 text-xs px-2 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+            } else {
+                roleBadge.textContent = '普通用户';
+                roleBadge.className = 'ml-2 text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+            }
+            
+            // 应用权限控制
+            applyPermissions();
+            return true;
+        }
+        
+        function applyPermissions() {
+            const adminElements = document.querySelectorAll('.admin-only');
+            if (currentUserRole !== 'admin') {
+                adminElements.forEach(function(el) {
+                    el.style.display = 'none';
+                });
+            } else {
+                adminElements.forEach(function(el) {
+                    el.style.display = '';
+                });
+            }
+        }
+        
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userRole');
+            localStorage.removeItem('username');
+            window.location.href = '/login';
+        }
+
         // 主题切换功能
         function initTheme() {
             const savedTheme = localStorage.getItem('theme') || 'light';
@@ -1424,14 +1607,22 @@ const adminHtml = `<!DOCTYPE html>
         document.head.appendChild(touchFeedbackStyle);
 
         // 初始化
-        initTheme();
-        loadStats();
-        loadConfig();
-        loadKnowledgeBase();
-        loadUnanswered();
-        loadContext();
-        loadCharts();
-        loadOperationLogs();
+        if (!checkAuth()) {
+            // 未登录，会自动跳转到登录页面
+        } else {
+            initTheme();
+            loadStats();
+            if (currentUserRole === 'admin') {
+                loadConfig();
+            }
+            loadKnowledgeBase();
+            loadUnanswered();
+            loadContext();
+            if (currentUserRole === 'admin') {
+                loadCharts();
+                loadOperationLogs();
+            }
+        }
     </script>
 </body>
 </html>`;
@@ -1443,6 +1634,25 @@ async function handleRequest(request, env) {
   
   if (request.method === 'OPTIONS') {
     return handleCORS();
+  }
+  
+  // 登录页面
+  if (path === '/login' && request.method === 'GET') {
+    return new Response(loginHtml, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
+  }
+  
+  // 登录 API
+  if (path === '/api/login' && request.method === 'POST') {
+    return await handleLogin(request, env);
+  }
+  
+  // 管理页面 - 需要验证 token
+  if (path === '/manage' && request.method === 'GET') {
+    return new Response(adminHtml, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
   }
   
   if (request.method === 'POST' && path === '/webhook') {
@@ -1548,10 +1758,11 @@ async function handleRequest(request, env) {
     return await getDebugStats(env);
   }
   
-  // 根路径重定向到管理界面
+  // 根路径重定向到登录页面
   if (path === '/' || path === '') {
-    return new Response(adminHtml, {
-      headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': '/login' }
     });
   }
 
@@ -1567,6 +1778,46 @@ function handleCORS() {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
+}
+
+// 登录处理
+async function handleLogin(request, env) {
+  try {
+    const body = await request.json();
+    const { username, password } = body;
+    
+    // 获取管理员密码
+    const adminPassword = env.ADMIN_TOKEN || 'admin';
+    
+    // 验证用户
+    if (username === 'admin' && password === adminPassword) {
+      const token = 'admin_' + Date.now() + '_' + Math.random().toString(36).substring(2);
+      return jsonResponse({
+        success: true,
+        token: token,
+        role: 'admin',
+        username: 'admin'
+      });
+    } else if (username === 'user' && password === 'user') {
+      const token = 'user_' + Date.now() + '_' + Math.random().toString(36).substring(2);
+      return jsonResponse({
+        success: true,
+        token: token,
+        role: 'user',
+        username: 'user'
+      });
+    } else {
+      return jsonResponse({
+        success: false,
+        error: '用户名或密码错误'
+      }, 401);
+    }
+  } catch (error) {
+    return jsonResponse({
+      success: false,
+      error: '登录请求处理失败'
+    }, 500);
+  }
 }
 
 function jsonResponse(data, status = 200) {
