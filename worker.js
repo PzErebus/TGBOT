@@ -16,176 +16,291 @@ const adminHtml = `<!DOCTYPE html>
     <title>Telegram 知识库机器人管理</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 深色模式样式 */
+        .dark body {
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+        }
+        .dark .bg-white {
+            background-color: #16213e !important;
+        }
+        .dark .bg-gray-50 {
+            background-color: #1a1a2e !important;
+        }
+        .dark .bg-gray-100 {
+            background-color: #1a1a2e !important;
+        }
+        .dark .text-gray-500 {
+            color: #a0a0a0 !important;
+        }
+        .dark .text-gray-600 {
+            color: #b0b0b0 !important;
+        }
+        .dark .text-gray-700 {
+            color: #c0c0c0 !important;
+        }
+        .dark .text-gray-800 {
+            color: #d0d0d0 !important;
+        }
+        .dark .text-gray-900 {
+            color: #e0e0e0 !important;
+        }
+        .dark .border {
+            border-color: #2d3748 !important;
+        }
+        .dark .border-b {
+            border-color: #2d3748 !important;
+        }
+        .dark input, .dark textarea {
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+            border-color: #2d3748;
+        }
+        .dark input::placeholder, .dark textarea::placeholder {
+            color: #666;
+        }
+        /* 平滑过渡 */
+        body, .bg-white, .bg-gray-50, .bg-gray-100 {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+    </style>
 </head>
 <body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8 max-w-6xl">
-        <h1 class="text-3xl font-bold mb-8 text-center text-blue-600">
-            <i class="fas fa-robot mr-2"></i>Telegram 知识库机器人管理
-        </h1>
+    <div class="container mx-auto px-3 py-4 md:px-4 md:py-8 max-w-6xl">
+        <div class="flex justify-between items-center mb-4 md:mb-8">
+            <div class="flex-1"></div>
+            <h1 class="text-xl md:text-3xl font-bold text-center text-blue-600 flex-1">
+                <i class="fas fa-robot mr-2"></i><span class="hidden sm:inline">Telegram 知识库机器人管理</span><span class="sm:hidden">TG机器人管理</span>
+            </h1>
+            <div class="flex-1 flex justify-end">
+                <button onclick="toggleTheme()" id="themeToggle" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg transition" title="切换主题">
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                </button>
+            </div>
+        </div>
         
         <!-- 统计信息 -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div class="bg-white rounded-lg shadow p-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-4 md:mb-8">
+            <div class="bg-white rounded-lg shadow p-3 md:p-6">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">知识库条目</p>
-                        <p class="text-2xl font-bold text-blue-600" id="kbCount">-</p>
+                        <p class="text-gray-500 text-xs md:text-sm">知识库条目</p>
+                        <p class="text-lg md:text-2xl font-bold text-blue-600" id="kbCount">-</p>
                     </div>
-                    <i class="fas fa-database text-3xl text-blue-200"></i>
+                    <i class="fas fa-database text-xl md:text-3xl text-blue-200"></i>
                 </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="bg-white rounded-lg shadow p-3 md:p-6">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">今日回答</p>
-                        <p class="text-2xl font-bold text-green-600" id="todayAnswers">-</p>
+                        <p class="text-gray-500 text-xs md:text-sm">今日回答</p>
+                        <p class="text-lg md:text-2xl font-bold text-green-600" id="todayAnswers">-</p>
                     </div>
-                    <i class="fas fa-comments text-3xl text-green-200"></i>
+                    <i class="fas fa-comments text-xl md:text-3xl text-green-200"></i>
                 </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="bg-white rounded-lg shadow p-3 md:p-6">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">今日AI调用</p>
-                        <p class="text-2xl font-bold text-purple-600" id="aiCalls">-</p>
+                        <p class="text-gray-500 text-xs md:text-sm">今日AI调用</p>
+                        <p class="text-lg md:text-2xl font-bold text-purple-600" id="aiCalls">-</p>
                     </div>
-                    <i class="fas fa-brain text-3xl text-purple-200"></i>
+                    <i class="fas fa-brain text-xl md:text-3xl text-purple-200"></i>
                 </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="bg-white rounded-lg shadow p-3 md:p-6">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">AI消耗 ( neurons )</p>
-                        <p class="text-2xl font-bold text-orange-600" id="aiUsage">-</p>
+                        <p class="text-gray-500 text-xs md:text-sm hidden md:block">AI消耗 ( neurons )</p>
+                        <p class="text-gray-500 text-xs md:hidden">AI消耗</p>
+                        <p class="text-lg md:text-2xl font-bold text-orange-600" id="aiUsage">-</p>
                     </div>
-                    <i class="fas fa-coins text-3xl text-orange-200"></i>
+                    <i class="fas fa-coins text-xl md:text-3xl text-orange-200"></i>
                 </div>
             </div>
         </div>
 
         <!-- 配置面板 -->
-        <div class="bg-white rounded-lg shadow mb-8">
-            <div class="p-6 border-b">
-                <h2 class="text-xl font-semibold"><i class="fas fa-cog mr-2"></i>机器人配置</h2>
+        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+            <div class="p-4 md:p-6 border-b">
+                <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-cog mr-2"></i>机器人配置</h2>
             </div>
-            <div class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="p-4 md:p-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
                     <div>
-                        <label class="flex items-center space-x-3 cursor-pointer">
-                            <input type="checkbox" id="botEnabled" class="w-5 h-5 text-blue-600 rounded">
-                            <span class="text-gray-700">启用机器人</span>
+                        <label class="flex items-center space-x-2 md:space-x-3 cursor-pointer">
+                            <input type="checkbox" id="botEnabled" class="w-4 h-4 md:w-5 md:h-5 text-blue-600 rounded">
+                            <span class="text-gray-700 text-sm md:text-base">启用机器人</span>
                         </label>
                     </div>
                     <div>
-                        <label class="flex items-center space-x-3 cursor-pointer">
-                            <input type="checkbox" id="onlyMentioned" class="w-5 h-5 text-blue-600 rounded">
-                            <span class="text-gray-700">仅当被@时回复</span>
+                        <label class="flex items-center space-x-2 md:space-x-3 cursor-pointer">
+                            <input type="checkbox" id="onlyMentioned" class="w-4 h-4 md:w-5 md:h-5 text-blue-600 rounded">
+                            <span class="text-gray-700 text-sm md:text-base">仅当被@时回复</span>
                         </label>
                     </div>
                     <div>
-                        <label class="flex items-center space-x-3 cursor-pointer">
-                            <input type="checkbox" id="useAIClassifier" class="w-5 h-5 text-blue-600 rounded" checked>
-                            <span class="text-gray-700">使用AI意图分类</span>
+                        <label class="flex items-center space-x-2 md:space-x-3 cursor-pointer">
+                            <input type="checkbox" id="useAIClassifier" class="w-4 h-4 md:w-5 md:h-5 text-blue-600 rounded" checked>
+                            <span class="text-gray-700 text-sm md:text-base">使用AI意图分类</span>
                         </label>
                     </div>
                     <div>
-                        <label class="flex items-center space-x-3 cursor-pointer">
-                            <input type="checkbox" id="useAIAnswer" class="w-5 h-5 text-blue-600 rounded" checked>
-                            <span class="text-gray-700">使用AI生成答案</span>
+                        <label class="flex items-center space-x-2 md:space-x-3 cursor-pointer">
+                            <input type="checkbox" id="useAIAnswer" class="w-4 h-4 md:w-5 md:h-5 text-blue-600 rounded" checked>
+                            <span class="text-gray-700 text-sm md:text-base">使用AI生成答案</span>
                         </label>
                     </div>
                     <div>
-                        <label class="block text-gray-700 mb-2">相似度阈值 (0.0-1.0)</label>
-                        <input type="number" id="similarityThreshold" min="0" max="1" step="0.1" value="0.6" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label class="block text-gray-700 mb-1 md:mb-2 text-sm md:text-base">相似度阈值 (0.0-1.0)</label>
+                        <input type="number" id="similarityThreshold" min="0" max="1" step="0.1" value="0.6" class="w-full px-3 py-1.5 md:px-4 md:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm md:text-base">
                     </div>
                     <div>
-                        <label class="block text-gray-700 mb-2">AI每日限额 (10-500)</label>
-                        <input type="number" id="aiDailyLimit" min="10" max="500" value="100" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label class="block text-gray-700 mb-1 md:mb-2 text-sm md:text-base">AI每日限额 (10-500)</label>
+                        <input type="number" id="aiDailyLimit" min="10" max="500" value="100" class="w-full px-3 py-1.5 md:px-4 md:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm md:text-base">
                     </div>
                     <div>
-                        <label class="block text-gray-700 mb-2">最大参考知识数 (1-10)</label>
-                        <input type="number" id="maxContextItems" min="1" max="10" value="5" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label class="block text-gray-700 mb-1 md:mb-2 text-sm md:text-base">最大参考知识数 (1-10)</label>
+                        <input type="number" id="maxContextItems" min="1" max="10" value="5" class="w-full px-3 py-1.5 md:px-4 md:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm md:text-base">
                     </div>
                 </div>
-                <button onclick="saveConfig()" class="mt-6 bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition">
-                    <i class="fas fa-save mr-2"></i>保存配置
+                <button onclick="saveConfig()" class="mt-4 md:mt-6 bg-blue-500 hover:bg-blue-600 text-white px-4 md:px-6 py-2 rounded-lg transition text-sm md:text-base">
+                    <i class="fas fa-save mr-1 md:mr-2"></i>保存配置
                 </button>
             </div>
         </div>
 
         <!-- 前言内容管理 -->
-        <div class="bg-white rounded-lg shadow mb-8">
-            <div class="p-6 border-b flex justify-between items-center">
-                <h2 class="text-xl font-semibold"><i class="fas fa-book-open mr-2"></i>前言/背景知识管理</h2>
-                <button onclick="showContextModal()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition">
-                    <i class="fas fa-plus mr-2"></i>添加前言
+        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+            <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+                <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-book-open mr-2"></i>前言/背景知识管理</h2>
+                <button onclick="showContextModal()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
+                    <i class="fas fa-plus mr-1 md:mr-2"></i>添加前言
                 </button>
             </div>
-            <div class="p-6">
-                <div id="contextList" class="space-y-4"></div>
+            <div class="p-4 md:p-6">
+                <div id="contextList" class="space-y-3 md:space-y-4"></div>
             </div>
         </div>
 
 
 
         <!-- 知识库管理 -->
-        <div class="bg-white rounded-lg shadow mb-8">
-            <div class="p-6 border-b flex justify-between items-center">
-                <h2 class="text-xl font-semibold"><i class="fas fa-book mr-2"></i>知识库管理</h2>
-                <div class="space-x-2">
-                    <button onclick="checkDuplicates()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition">
-                        <i class="fas fa-search mr-2"></i>查重
+        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+            <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+                <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-book mr-2"></i>知识库管理</h2>
+                <div class="flex flex-wrap gap-1.5 md:gap-2">
+                    <button onclick="checkDuplicates()" class="bg-orange-500 hover:bg-orange-600 text-white px-2.5 py-1.5 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm">
+                        <i class="fas fa-search mr-1"></i><span class="hidden sm:inline">查重</span>
                     </button>
-                    <button onclick="exportKnowledge()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition">
-                        <i class="fas fa-file-export mr-2"></i>导出
+                    <button onclick="exportKnowledge()" class="bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1.5 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm">
+                        <i class="fas fa-file-export mr-1"></i><span class="hidden sm:inline">导出</span>
                     </button>
-                    <button onclick="showBatchImportModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition">
-                        <i class="fas fa-file-import mr-2"></i>导入
+                    <button onclick="showBatchImportModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-2.5 py-1.5 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm">
+                        <i class="fas fa-file-import mr-1"></i><span class="hidden sm:inline">导入</span>
                     </button>
-                    <button onclick="showKnowledgeModal()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition">
-                        <i class="fas fa-plus mr-2"></i>添加知识
+                    <button onclick="showKnowledgeModal()" class="bg-green-500 hover:bg-green-600 text-white px-2.5 py-1.5 md:px-4 md:py-2 rounded-lg transition text-xs md:text-sm">
+                        <i class="fas fa-plus mr-1"></i><span class="hidden sm:inline">添加知识</span>
                     </button>
                 </div>
             </div>
-            <div class="p-6">
-                <div class="mb-4">
+            <div class="p-4 md:p-6">
+                <div class="mb-3 md:mb-4">
                     <input type="text" id="searchKb" placeholder="搜索知识库..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
-                <div id="kbList" class="space-y-4 max-h-96 overflow-y-auto pr-2"></div>
+                <div id="kbList" class="space-y-3 md:space-y-4 max-h-64 md:max-h-96 overflow-y-auto pr-2"></div>
             </div>
         </div>
 
         <!-- 未回答问题 -->
-        <div class="bg-white rounded-lg shadow mb-8">
-            <div class="p-6 border-b flex justify-between items-center">
-                <h2 class="text-xl font-semibold"><i class="fas fa-question-circle mr-2"></i>未回答问题</h2>
-                <button onclick="loadUnanswered()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition">
-                    <i class="fas fa-sync mr-2"></i>刷新
+        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+            <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+                <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-question-circle mr-2"></i>未回答问题</h2>
+                <button onclick="loadUnanswered()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
+                    <i class="fas fa-sync mr-1 md:mr-2"></i>刷新
                 </button>
             </div>
-            <div class="p-6">
-                <div id="unansweredList" class="space-y-2 max-h-64 overflow-y-auto pr-2"></div>
+            <div class="p-4 md:p-6">
+                <div id="unansweredList" class="space-y-2 max-h-48 md:max-h-64 overflow-y-auto pr-2"></div>
+            </div>
+        </div>
+
+        <!-- 数据统计图表 -->
+        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+            <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+                <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-chart-bar mr-2"></i>数据统计</h2>
+                <button onclick="loadCharts()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
+                    <i class="fas fa-sync mr-1 md:mr-2"></i>刷新
+                </button>
+            </div>
+            <div class="p-4 md:p-6">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                    <div>
+                        <h3 class="text-sm md:text-base font-medium text-gray-700 mb-2 md:mb-3">近7日问答趋势</h3>
+                        <div class="relative h-48 md:h-64">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-sm md:text-base font-medium text-gray-700 mb-2 md:mb-3">热门问题 TOP5</h3>
+                        <div class="relative h-48 md:h-64">
+                            <canvas id="hotQuestionsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 md:mt-6">
+                    <h3 class="text-sm md:text-base font-medium text-gray-700 mb-2 md:mb-3">AI 调用 vs 知识库匹配</h3>
+                    <div class="relative h-40 md:h-48">
+                        <canvas id="sourceChart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- 知识缺口分析 -->
-        <div class="bg-white rounded-lg shadow">
-            <div class="p-6 border-b flex justify-between items-center">
-                <h2 class="text-xl font-semibold"><i class="fas fa-chart-line mr-2"></i>知识缺口分析</h2>
-                <button onclick="analyzeGaps()" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg transition">
-                    <i class="fas fa-search mr-2"></i>分析缺口
+        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+            <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+                <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-chart-line mr-2"></i>知识缺口分析</h2>
+                <button onclick="analyzeGaps()" class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
+                    <i class="fas fa-search mr-1 md:mr-2"></i>分析缺口
                 </button>
             </div>
-            <div class="p-6">
-                <div id="gapsContainer" class="space-y-4"></div>
+            <div class="p-4 md:p-6">
+                <div id="gapsContainer" class="space-y-3 md:space-y-4"></div>
+            </div>
+        </div>
+
+        <!-- 操作日志 -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+                <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-history mr-2"></i>操作日志</h2>
+                <div class="flex gap-2">
+                    <select id="logFilter" onchange="loadOperationLogs()" class="px-2 py-1 border rounded text-sm">
+                        <option value="">全部类型</option>
+                        <option value="add">添加</option>
+                        <option value="update">修改</option>
+                        <option value="delete">删除</option>
+                        <option value="config">配置</option>
+                    </select>
+                    <button onclick="loadOperationLogs()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
+                        <i class="fas fa-sync mr-1"></i>刷新
+                    </button>
+                </div>
+            </div>
+            <div class="p-4 md:p-6">
+                <div id="operationLogsList" class="space-y-2 max-h-64 overflow-y-auto pr-2">
+                    <div class="text-center py-8 text-gray-500">加载中...</div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- 前言编辑模态框 -->
-    <div id="contextModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-8 max-w-2xl w-full mx-4 max-h-screen overflow-y-auto">
-            <h3 class="text-xl font-semibold mb-4" id="contextModalTitle">添加前言</h3>
+    <div id="contextModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-2 sm:p-4">
+        <div class="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full mx-0 sm:mx-4 max-h-[95vh] sm:max-h-screen overflow-y-auto">
+            <h3 class="text-lg sm:text-xl font-semibold mb-3 sm:mb-4" id="contextModalTitle">添加前言</h3>
             <input type="hidden" id="contextId">
             <div class="space-y-4">
                 <div>
@@ -197,77 +312,77 @@ const adminHtml = `<!DOCTYPE html>
                     <textarea id="contextContent" rows="6" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
                 </div>
                 <div>
-                    <label class="block text-gray-700 mb-2">分类</label>
-                    <input type="text" id="contextCategory" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">分类</label>
+                    <input type="text" id="contextCategory" class="w-full px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
                 </div>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                        <label class="block text-gray-700 mb-2">优先级</label>
-                        <input type="number" id="contextPriority" value="0" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label class="block text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">优先级</label>
+                        <input type="number" id="contextPriority" value="0" class="w-full px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
                     </div>
                     <div class="flex items-center">
-                        <label class="flex items-center space-x-3 cursor-pointer mt-6">
-                            <input type="checkbox" id="contextEnabled" class="w-5 h-5 text-blue-600 rounded" checked>
-                            <span class="text-gray-700">启用</span>
+                        <label class="flex items-center space-x-2 sm:space-x-3 cursor-pointer mt-0 sm:mt-6">
+                            <input type="checkbox" id="contextEnabled" class="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 rounded" checked>
+                            <span class="text-gray-700 text-sm sm:text-base">启用</span>
                         </label>
                     </div>
                 </div>
             </div>
-            <div class="mt-6 flex justify-end space-x-3">
-                <button onclick="closeContextModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-100">取消</button>
-                <button onclick="saveContext()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg">保存</button>
+            <div class="mt-4 sm:mt-6 flex justify-end space-x-2 sm:space-x-3">
+                <button onclick="closeContextModal()" class="px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg hover:bg-gray-100 text-sm sm:text-base">取消</button>
+                <button onclick="saveContext()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 sm:px-6 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base">保存</button>
             </div>
         </div>
     </div>
 
     <!-- 知识编辑模态框 -->
-    <div id="knowledgeModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-8 max-w-2xl w-full mx-4 max-h-screen overflow-y-auto">
-            <h3 class="text-xl font-semibold mb-4" id="modalTitle">添加知识</h3>
+    <div id="knowledgeModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-2 sm:p-4">
+        <div class="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full mx-0 sm:mx-4 max-h-[95vh] sm:max-h-screen overflow-y-auto">
+            <h3 class="text-lg sm:text-xl font-semibold mb-3 sm:mb-4" id="modalTitle">添加知识</h3>
             <input type="hidden" id="editAnswerId">
-            <div class="space-y-4">
+            <div class="space-y-3 sm:space-y-4">
                 <div>
-                    <label class="block text-gray-700 mb-2">答案内容（每行一个，机器人会随机选择一个回复）</label>
-                    <textarea id="answer" rows="4" placeholder="本服无白名单。&#10;哪里来的白名单。你给我啊？&#10;没有白名单这个东西。" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                    <label class="block text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">答案内容（每行一个，机器人会随机选择一个回复）</label>
+                    <textarea id="answer" rows="3" sm:rows="4" placeholder="本服无白名单。&#10;哪里来的白名单。你给我啊？&#10;没有白名单这个东西。" class="w-full px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"></textarea>
                 </div>
                 <div>
-                    <label class="block text-gray-700 mb-2">问题变体（每行一个）</label>
-                    <textarea id="questions" rows="6" placeholder="怎么联系客服？
+                    <label class="block text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">问题变体（每行一个）</label>
+                    <textarea id="questions" rows="4" sm:rows="6" placeholder="怎么联系客服？
 客服电话是多少？
-如何联系你们？" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+如何联系你们？" class="w-full px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"></textarea>
                 </div>
                 <div>
-                    <label class="block text-gray-700 mb-2">分类</label>
-                    <input type="text" id="category" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">分类</label>
+                    <input type="text" id="category" class="w-full px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
                 </div>
                 <div>
-                    <label class="block text-gray-700 mb-2">关键词（逗号分隔，用于快速匹配）</label>
-                    <input type="text" id="keywords" placeholder="客服,电话,联系" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">关键词（逗号分隔，用于快速匹配）</label>
+                    <input type="text" id="keywords" placeholder="客服,电话,联系" class="w-full px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
                 </div>
             </div>
-            <div class="mt-6 flex justify-end space-x-3">
-                <button onclick="closeKnowledgeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-100">取消</button>
-                <button onclick="saveKnowledge()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg">保存</button>
+            <div class="mt-4 sm:mt-6 flex justify-end space-x-2 sm:space-x-3">
+                <button onclick="closeKnowledgeModal()" class="px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg hover:bg-gray-100 text-sm sm:text-base">取消</button>
+                <button onclick="saveKnowledge()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 sm:px-6 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base">保存</button>
             </div>
         </div>
     </div>
 
     <!-- 批量导入模态框 -->
-    <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-8 max-w-3xl w-full mx-4 max-h-screen overflow-y-auto">
-            <h3 class="text-xl font-semibold mb-4">批量导入知识</h3>
-            <div class="space-y-4">
+    <div id="batchImportModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-2 sm:p-4">
+        <div class="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-3xl w-full mx-0 sm:mx-4 max-h-[95vh] sm:max-h-screen overflow-y-auto">
+            <h3 class="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">批量导入知识</h3>
+            <div class="space-y-3 sm:space-y-4">
                 <div>
-                    <label class="block text-gray-700 mb-2">导入格式（每行：问题1|问题2|... = 答案1||答案2||...）</label>
-                    <textarea id="batchData" rows="12" placeholder="怎么联系客服|客服电话是多少|如何联系你们 = 您可以通过以下方式联系我们：电话 400-123-4567，邮箱 support@example.com
+                    <label class="block text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">导入格式（每行：问题1|问题2|... = 答案1||答案2||...）</label>
+                    <textarea id="batchData" rows="8" sm:rows="12" placeholder="怎么联系客服|客服电话是多少|如何联系你们 = 您可以通过以下方式联系我们：电话 400-123-4567，邮箱 support@example.com
 价格是多少|多少钱 = 我们的产品价格从99元起||具体价格请查看官网||可以联系客服咨询详细价格
-白名单 = 本服无白名单。||哪里来的白名单。你给我啊？||没有白名单这个东西。" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"></textarea>
-                    <p class="text-xs text-gray-500 mt-2">提示：多个答案用 || 分隔，机器人会随机选择一个回复</p>
+白名单 = 本服无白名单。||哪里来的白名单。你给我啊？||没有白名单这个东西。" class="w-full px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs sm:text-sm"></textarea>
+                    <p class="text-xs text-gray-500 mt-1 sm:mt-2">提示：多个答案用 || 分隔，机器人会随机选择一个回复</p>
                 </div>
             </div>
-            <div class="mt-6 flex justify-end space-x-3">
-                <button onclick="closeBatchImportModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-100">取消</button>
-                <button onclick="processBatchImport()" class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-lg">导入</button>
+            <div class="mt-4 sm:mt-6 flex justify-end space-x-2 sm:space-x-3">
+                <button onclick="closeBatchImportModal()" class="px-3 py-1.5 sm:px-4 sm:py-2 border rounded-lg hover:bg-gray-100 text-sm sm:text-base">取消</button>
+                <button onclick="processBatchImport()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 sm:px-6 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base">导入</button>
             </div>
         </div>
     </div>
@@ -351,21 +466,21 @@ const adminHtml = `<!DOCTYPE html>
                 }
                 
                 list.innerHTML = filtered.map(item => {
-                    const questionsHtml = item.questions.map(q => '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">' + escapeHtml(q) + '</span>').join('');
-                    const categoryHtml = item.category ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded mr-2">' + escapeHtml(item.category) + '</span>' : '';
+                    const questionsHtml = item.questions.map(q => '<span class="text-xs bg-blue-100 text-blue-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded inline-block mb-1">' + escapeHtml(q) + '</span>').join('');
+                    const categoryHtml = item.category ? '<span class="text-xs bg-green-100 text-green-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded mr-1 sm:mr-2 inline-block mb-1">' + escapeHtml(item.category) + '</span>' : '';
                     // 多答案显示
                     const answers = item.answers || [item.answer];
-                    const answersHtml = answers.map((a, idx) => '<div class="text-sm text-gray-600 mt-1 bg-gray-50 p-2 rounded"><span class="text-xs text-gray-400">[' + (idx + 1) + ']</span> ' + escapeHtml(a) + '</div>').join('');
-                    const answerCountBadge = answers.length > 1 ? '<span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded ml-2">' + answers.length + '个答案</span>' : '';
-                    return '<div class="border rounded-lg p-4 hover:bg-gray-50">' +
-                        '<div class="flex justify-between items-start">' +
-                            '<div class="flex-1">' +
-                                '<div class="mb-2">' + categoryHtml + questionsHtml + answerCountBadge + '</div>' +
-                                '<div class="mt-2">' + answersHtml + '</div>' +
+                    const answersHtml = answers.map((a, idx) => '<div class="text-xs sm:text-sm text-gray-600 mt-1 bg-gray-50 p-1.5 sm:p-2 rounded"><span class="text-xs text-gray-400">[' + (idx + 1) + ']</span> ' + escapeHtml(a) + '</div>').join('');
+                    const answerCountBadge = answers.length > 1 ? '<span class="text-xs bg-purple-100 text-purple-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded ml-1 sm:ml-2 inline-block mb-1">' + answers.length + '个答案</span>' : '';
+                    return '<div class="border rounded-lg p-2.5 sm:p-4 hover:bg-gray-50">' +
+                        '<div class="flex flex-col sm:flex-row justify-between items-start sm:items-start gap-2 sm:gap-0">' +
+                            '<div class="flex-1 w-full sm:w-auto">' +
+                                '<div class="mb-1 sm:mb-2">' + categoryHtml + questionsHtml + answerCountBadge + '</div>' +
+                                '<div class="mt-1 sm:mt-2">' + answersHtml + '</div>' +
                             '</div>' +
-                            '<div class="ml-4 space-x-2">' +
-                                '<button onclick="editKnowledge(' + item.id + ')" class="text-blue-500 hover:text-blue-700"><i class="fas fa-edit"></i></button>' +
-                                '<button onclick="deleteKnowledge(' + item.id + ')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>' +
+                            '<div class="flex sm:ml-4 space-x-2 sm:space-x-2 self-end sm:self-start">' +
+                                '<button onclick="editKnowledge(' + item.id + ')" class="text-blue-500 hover:text-blue-700 p-1"><i class="fas fa-edit text-sm sm:text-base"></i></button>' +
+                                '<button onclick="deleteKnowledge(' + item.id + ')" class="text-red-500 hover:text-red-700 p-1"><i class="fas fa-trash text-sm sm:text-base"></i></button>' +
                             '</div>' +
                         '</div>' +
                     '</div>';
@@ -557,13 +672,13 @@ const adminHtml = `<!DOCTYPE html>
                 }
                 
                 list.innerHTML = items.map(item => {
-                    return '<div class="flex justify-between items-center p-3 bg-gray-50 rounded">' +
-                        '<div class="flex-1">' +
-                            '<div class="font-medium text-gray-900">' + escapeHtml(item.message) + '</div>' +
-                            '<div class="text-sm text-gray-500">' + new Date(item.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) + '</div>' +
+                    return '<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-2 sm:p-3 bg-gray-50 rounded gap-2 sm:gap-0">' +
+                        '<div class="flex-1 w-full sm:w-auto min-w-0">' +
+                            '<div class="font-medium text-gray-900 text-sm sm:text-base break-words">' + escapeHtml(item.message) + '</div>' +
+                            '<div class="text-xs sm:text-sm text-gray-500">' + new Date(item.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) + '</div>' +
                         '</div>' +
-                        '<button onclick="quickAddKnowledge(' + JSON.stringify(item.message).replace(/"/g, '&quot;') + ')" class="ml-4 text-blue-500 hover:text-blue-700">' +
-                            '<i class="fas fa-plus"></i> 添加知识' +
+                        '<button onclick="quickAddKnowledge(' + JSON.stringify(item.message).replace(/"/g, '&quot;') + ')" class="sm:ml-4 text-blue-500 hover:text-blue-700 text-xs sm:text-sm whitespace-nowrap flex items-center">' +
+                            '<i class="fas fa-plus mr-1"></i><span class="hidden sm:inline">添加知识</span><span class="sm:hidden">添加</span>' +
                         '</button>' +
                     '</div>';
                 }).join('');
@@ -642,17 +757,17 @@ const adminHtml = `<!DOCTYPE html>
                 }
                 
                 // 显示重复内容，添加全选和批量删除按钮
-                let html = '<div class="mb-4 p-4 bg-orange-50 border-l-4 border-orange-400">' +
-                    '<div class="flex justify-between items-center">' +
+                let html = '<div class="mb-3 sm:mb-4 p-3 sm:p-4 bg-orange-50 border-l-4 border-orange-400">' +
+                    '<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">' +
                         '<div>' +
-                            '<p class="font-medium text-orange-800">发现 ' + duplicates.length + ' 个重复项</p>' +
-                            '<p class="text-sm text-orange-600">勾选要删除的项，然后点击批量删除</p>' +
+                            '<p class="font-medium text-orange-800 text-sm sm:text-base">发现 ' + duplicates.length + ' 个重复项</p>' +
+                            '<p class="text-xs sm:text-sm text-orange-600">勾选要删除的项，然后点击批量删除</p>' +
                         '</div>' +
-                        '<div class="space-x-2">' +
-                            '<button onclick="toggleSelectAll()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm">' +
+                        '<div class="flex space-x-2">' +
+                            '<button onclick="toggleSelectAll()" class="bg-gray-500 hover:bg-gray-600 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm">' +
                                 '<i class="fas fa-check-square mr-1"></i>全选' +
                             '</button>' +
-                            '<button onclick="batchDeleteDuplicates()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">' +
+                            '<button onclick="batchDeleteDuplicates()" class="bg-red-500 hover:bg-red-600 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm">' +
                                 '<i class="fas fa-trash mr-1"></i>批量删除' +
                             '</button>' +
                         '</div>' +
@@ -660,20 +775,20 @@ const adminHtml = `<!DOCTYPE html>
                 '</div>';
                 
                 html += duplicates.map((dup, index) => {
-                    return '<div class="border rounded-lg p-4 mb-4 bg-red-50 duplicate-item" data-id="' + dup.current.id + '">' +
-                        '<div class="flex justify-between items-start mb-2">' +
-                            '<div class="flex items-start flex-1">' +
-                                '<input type="checkbox" class="duplicate-checkbox mt-1 mr-3 w-4 h-4 text-red-600 rounded" value="' + dup.current.id + '">' +
-                                '<div class="flex-1">' +
-                                    '<div class="text-sm text-red-600 font-medium mb-1">重复 #' + (index + 1) + '</div>' +
-                                    '<div class="text-gray-800 mb-1"><span class="text-gray-500">问题：</span>' + escapeHtml(dup.question || dup.current.questions[0]) + '</div>' +
-                                    '<div class="text-gray-800 mb-1"><span class="text-gray-500">答案：</span>' + escapeHtml(dup.current.answer.substring(0, 50)) + (dup.current.answer.length > 50 ? '...' : '') + '</div>' +
-                                    '<div class="text-sm text-gray-500 mt-2">与以下条目重复：</div>' +
-                                    '<div class="text-gray-800 pl-4 border-l-2 border-gray-300">' + escapeHtml(dup.existing.questions[0]) + '</div>' +
+                    return '<div class="border rounded-lg p-2.5 sm:p-4 mb-3 sm:mb-4 bg-red-50 duplicate-item" data-id="' + dup.current.id + '">' +
+                        '<div class="flex flex-col sm:flex-row justify-between items-start sm:items-start gap-2 sm:gap-0 mb-1 sm:mb-2">' +
+                            '<div class="flex items-start flex-1 w-full sm:w-auto">' +
+                                '<input type="checkbox" class="duplicate-checkbox mt-1 mr-2 sm:mr-3 w-4 h-4 text-red-600 rounded flex-shrink-0" value="' + dup.current.id + '">' +
+                                '<div class="flex-1 min-w-0">' +
+                                    '<div class="text-xs sm:text-sm text-red-600 font-medium mb-1">重复 #' + (index + 1) + '</div>' +
+                                    '<div class="text-xs sm:text-sm text-gray-800 mb-1 break-words"><span class="text-gray-500">问题：</span>' + escapeHtml(dup.question || dup.current.questions[0]) + '</div>' +
+                                    '<div class="text-xs sm:text-sm text-gray-800 mb-1 break-words"><span class="text-gray-500">答案：</span>' + escapeHtml(dup.current.answer.substring(0, 50)) + (dup.current.answer.length > 50 ? '...' : '') + '</div>' +
+                                    '<div class="text-xs sm:text-sm text-gray-500 mt-1 sm:mt-2">与以下条目重复：</div>' +
+                                    '<div class="text-xs sm:text-sm text-gray-800 pl-2 sm:pl-4 border-l-2 border-gray-300 break-words">' + escapeHtml(dup.existing.questions[0]) + '</div>' +
                                 '</div>' +
                             '</div>' +
-                            '<button onclick="deleteDuplicate(' + dup.current.id + ')" class="ml-4 bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">' +
-                                '<i class="fas fa-trash mr-1"></i>删除' +
+                            '<button onclick="deleteDuplicate(' + dup.current.id + ')" class="sm:ml-4 bg-red-500 hover:bg-red-600 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm self-end sm:self-start flex items-center">' +
+                                '<i class="fas fa-trash mr-1"></i><span class="hidden sm:inline">删除</span>' +
                             '</button>' +
                         '</div>' +
                     '</div>';
@@ -710,17 +825,17 @@ const adminHtml = `<!DOCTYPE html>
             // Create progress modal
             const modal = document.createElement('div');
             modal.id = 'deleteProgress';
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.innerHTML = '<div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">' +
-                '<h3 class="text-lg font-semibold mb-4">Deleting...</h3>' +
-                '<div class="w-full bg-gray-200 rounded-full h-4 mb-2">' +
-                    '<div id="progressBar" class="bg-red-500 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>' +
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+            modal.innerHTML = '<div class="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-0 sm:mx-4">' +
+                '<h3 class="text-base sm:text-lg font-semibold mb-3 sm:mb-4">删除中...</h3>' +
+                '<div class="w-full bg-gray-200 rounded-full h-3 sm:h-4 mb-2">' +
+                    '<div id="progressBar" class="bg-red-500 h-3 sm:h-4 rounded-full transition-all duration-300" style="width: 0%"></div>' +
                 '</div>' +
-                '<div class="flex justify-between text-sm text-gray-600">' +
+                '<div class="flex justify-between text-xs sm:text-sm text-gray-600">' +
                     '<span id="progressText">0 / ' + total + '</span>' +
                     '<span id="progressPercent">0%</span>' +
                 '</div>' +
-                '<div id="progressDetails" class="mt-2 text-sm text-gray-500 max-h-32 overflow-y-auto"></div>' +
+                '<div id="progressDetails" class="mt-2 text-xs sm:text-sm text-gray-500 max-h-24 sm:max-h-32 overflow-y-auto"></div>' +
             '</div>';
             document.body.appendChild(modal);
             
@@ -834,19 +949,19 @@ const adminHtml = `<!DOCTYPE html>
                 }
                 
                 container.innerHTML = items.map(item => {
-                    return '<div class="border rounded-lg p-4 ' + (item.enabled ? 'bg-white' : 'bg-gray-100') + '">' +
-                        '<div class="flex justify-between items-start">' +
-                            '<div class="flex-1">' +
-                                '<div class="flex items-center space-x-2 mb-2">' +
-                                    '<span class="font-medium text-gray-900">' + escapeHtml(item.title) + '</span>' +
-                                    (item.category ? '<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">' + escapeHtml(item.category) + '</span>' : '') +
-                                    (!item.enabled ? '<span class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded">已禁用</span>' : '') +
+                    return '<div class="border rounded-lg p-2.5 sm:p-4 ' + (item.enabled ? 'bg-white' : 'bg-gray-100') + '">' +
+                        '<div class="flex flex-col sm:flex-row justify-between items-start sm:items-start gap-2 sm:gap-0">' +
+                            '<div class="flex-1 w-full sm:w-auto min-w-0">' +
+                                '<div class="flex flex-wrap items-center gap-1 sm:gap-2 mb-1 sm:mb-2">' +
+                                    '<span class="font-medium text-gray-900 text-sm sm:text-base">' + escapeHtml(item.title) + '</span>' +
+                                    (item.category ? '<span class="text-xs bg-gray-100 text-gray-600 px-1.5 sm:px-2 py-0.5 rounded">' + escapeHtml(item.category) + '</span>' : '') +
+                                    (!item.enabled ? '<span class="text-xs bg-red-100 text-red-600 px-1.5 sm:px-2 py-0.5 rounded">已禁用</span>' : '') +
                                 '</div>' +
-                                '<div class="text-sm text-gray-600 line-clamp-2">' + escapeHtml(item.content) + '</div>' +
+                                '<div class="text-xs sm:text-sm text-gray-600 line-clamp-2">' + escapeHtml(item.content) + '</div>' +
                             '</div>' +
-                            '<div class="ml-4 space-x-2">' +
-                                '<button onclick="editContext(' + item.id + ')" class="text-blue-500 hover:text-blue-700"><i class="fas fa-edit"></i></button>' +
-                                '<button onclick="deleteContext(' + item.id + ')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>' +
+                            '<div class="flex sm:ml-4 space-x-2 self-end sm:self-start">' +
+                                '<button onclick="editContext(' + item.id + ')" class="text-blue-500 hover:text-blue-700 p-1"><i class="fas fa-edit text-sm sm:text-base"></i></button>' +
+                                '<button onclick="deleteContext(' + item.id + ')" class="text-red-500 hover:text-red-700 p-1"><i class="fas fa-trash text-sm sm:text-base"></i></button>' +
                             '</div>' +
                         '</div>' +
                     '</div>';
@@ -935,12 +1050,294 @@ const adminHtml = `<!DOCTYPE html>
             }
         }
 
+        // 图表实例
+        let trendChartInstance = null;
+        let hotQuestionsChartInstance = null;
+        let sourceChartInstance = null;
+
+        // 加载图表数据
+        async function loadCharts() {
+            try {
+                const res = await fetch('/manage/charts');
+                const data = await res.json();
+                
+                renderTrendChart(data.trend);
+                renderHotQuestionsChart(data.hotQuestions);
+                renderSourceChart(data.sourceStats);
+            } catch (e) {
+                console.error('Load charts error:', e);
+            }
+        }
+
+        // 渲染趋势图
+        function renderTrendChart(trendData) {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#e0e0e0' : '#666';
+            const gridColor = isDark ? '#2d3748' : '#e5e7eb';
+            
+            if (trendChartInstance) {
+                trendChartInstance.destroy();
+            }
+            
+            trendChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: trendData.dates,
+                    datasets: [{
+                        label: '回答数',
+                        data: trendData.counts,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1, color: textColor },
+                            grid: { color: gridColor }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 渲染热门问题图
+        function renderHotQuestionsChart(hotQuestions) {
+            const ctx = document.getElementById('hotQuestionsChart').getContext('2d');
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#e0e0e0' : '#666';
+            const gridColor = isDark ? '#2d3748' : '#e5e7eb';
+            
+            if (hotQuestionsChartInstance) {
+                hotQuestionsChartInstance.destroy();
+            }
+            
+            const labels = hotQuestions.map((q, i) => 'TOP' + (i + 1));
+            const data = hotQuestions.map(q => q.count);
+            
+            hotQuestionsChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '提问次数',
+                        data: data,
+                        backgroundColor: [
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(249, 115, 22, 0.8)',
+                            'rgba(245, 158, 11, 0.8)',
+                            'rgba(16, 185, 129, 0.8)',
+                            'rgba(59, 130, 246, 0.8)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    const idx = context[0].dataIndex;
+                                    return hotQuestions[idx]?.question?.substring(0, 20) + '...' || '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { stepSize: 1, color: textColor },
+                            grid: { color: gridColor }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 渲染来源统计图
+        function renderSourceChart(sourceStats) {
+            const ctx = document.getElementById('sourceChart').getContext('2d');
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#e0e0e0' : '#666';
+            
+            if (sourceChartInstance) {
+                sourceChartInstance.destroy();
+            }
+            
+            const total = sourceStats.ai + sourceStats.knowledgeBase;
+            
+            sourceChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['AI生成', '知识库'],
+                    datasets: [{
+                        data: [sourceStats.ai, sourceStats.knowledgeBase],
+                        backgroundColor: [
+                            'rgba(139, 92, 246, 0.8)',
+                            'rgba(16, 185, 129, 0.8)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                color: textColor,
+                                generateLabels: function(chart) {
+                                    const data = chart.data;
+                                    return data.labels.map(function(label, i) {
+                                        const count = data.datasets[0].data[i];
+                                        const percent = total > 0 ? Math.round(count / total * 100) : 0;
+                                        return {
+                                            text: label + ': ' + count + ' (' + percent + '%)',
+                                            fillStyle: data.datasets[0].backgroundColor[i],
+                                            hidden: false,
+                                            index: i
+                                        };
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 主题切换功能
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const html = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+            
+            if (savedTheme === 'dark') {
+                html.classList.add('dark');
+                icon.className = 'fas fa-sun';
+            } else {
+                html.classList.remove('dark');
+                icon.className = 'fas fa-moon';
+            }
+        }
+        
+        function toggleTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+            const isDark = html.classList.toggle('dark');
+            
+            if (isDark) {
+                localStorage.setItem('theme', 'dark');
+                icon.className = 'fas fa-sun';
+            } else {
+                localStorage.setItem('theme', 'light');
+                icon.className = 'fas fa-moon';
+            }
+            
+            // 更新图表主题
+            updateChartsTheme(isDark);
+        }
+        
+        // 更新图表主题色
+        function updateChartsTheme(isDark) {
+            const textColor = isDark ? '#e0e0e0' : '#666';
+            const gridColor = isDark ? '#2d3748' : '#e5e7eb';
+            
+            [trendChartInstance, hotQuestionsChartInstance, sourceChartInstance].forEach(function(chart) {
+                if (chart) {
+                    chart.options.plugins.legend.labels.color = textColor;
+                    if (chart.options.scales.x) {
+                        chart.options.scales.x.ticks.color = textColor;
+                        chart.options.scales.x.grid.color = gridColor;
+                    }
+                    if (chart.options.scales.y) {
+                        chart.options.scales.y.ticks.color = textColor;
+                        chart.options.scales.y.grid.color = gridColor;
+                    }
+                    chart.update();
+                }
+            });
+        }
+
+        // 加载操作日志
+        async function loadOperationLogs() {
+            try {
+                const filter = document.getElementById('logFilter').value;
+                const res = await fetch('/manage/logs');
+                let logs = await res.json();
+                
+                // 过滤
+                if (filter) {
+                    logs = logs.filter(function(log) {
+                        return log.operation_type.indexOf(filter) !== -1;
+                    });
+                }
+                
+                const list = document.getElementById('operationLogsList');
+                
+                if (logs.length === 0) {
+                    list.innerHTML = '<div class="text-center py-8 text-gray-500">暂无操作日志</div>';
+                    return;
+                }
+                
+                list.innerHTML = logs.map(function(log) {
+                    const typeColors = {
+                        'add': 'bg-green-100 text-green-800',
+                        'update': 'bg-blue-100 text-blue-800',
+                        'delete': 'bg-red-100 text-red-800',
+                        'config': 'bg-purple-100 text-purple-800'
+                    };
+                    const typeNames = {
+                        'add': '添加',
+                        'update': '修改',
+                        'delete': '删除',
+                        'config': '配置'
+                    };
+                    const colorClass = typeColors[log.operation_type] || 'bg-gray-100 text-gray-800';
+                    const typeName = typeNames[log.operation_type] || log.operation_type;
+                    
+                    return '<div class="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 bg-gray-50 rounded text-xs sm:text-sm">' +
+                        '<span class="px-1.5 sm:px-2 py-0.5 rounded text-xs ' + colorClass + ' flex-shrink-0">' + typeName + '</span>' +
+                        '<div class="flex-1 min-w-0">' +
+                            '<div class="font-medium text-gray-900 break-words">' + escapeHtml(log.operation_desc) + '</div>' +
+                            (log.details ? '<div class="text-gray-500 mt-0.5 break-words">' + escapeHtml(log.details) + '</div>' : '') +
+                            '<div class="text-gray-400 text-xs mt-1">' + new Date(log.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) + '</div>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            } catch (e) {
+                document.getElementById('operationLogsList').innerHTML = '<div class="text-center py-8 text-red-500">加载失败</div>';
+            }
+        }
+
         // 初始化
+        initTheme();
         loadStats();
         loadConfig();
         loadKnowledgeBase();
         loadUnanswered();
         loadContext();
+        loadCharts();
+        loadOperationLogs();
     </script>
 </body>
 </html>`;
@@ -961,7 +1358,15 @@ async function handleRequest(request, env) {
   if (request.method === 'GET' && path === '/manage/stats') {
     return await getStats(env);
   }
-  
+
+  if (request.method === 'GET' && path === '/manage/charts') {
+    return await getChartData(env);
+  }
+
+  if (request.method === 'GET' && path === '/manage/logs') {
+    return await getOperationLogs(env);
+  }
+
   if (path === '/manage/config') {
     if (request.method === 'GET') {
       return await getConfigApi(env);
@@ -994,7 +1399,7 @@ async function handleRequest(request, env) {
       return await updateKnowledge(id, request, env);
     }
     if (request.method === 'DELETE') {
-      return await deleteKnowledge(id, env);
+      return await deleteKnowledge(id, env, request);
     }
   }
   
@@ -1167,6 +1572,13 @@ async function saveConfig(request, env) {
       maxContextItems || 5,
       aiDailyLimit || 100
     ).run();
+    
+    // 记录操作日志
+    const configChanges = [];
+    if (botEnabled !== undefined) configChanges.push('机器人: ' + (botEnabled ? '启用' : '禁用'));
+    if (similarityThreshold !== undefined) configChanges.push('相似度: ' + similarityThreshold);
+    if (aiDailyLimit !== undefined) configChanges.push('AI限额: ' + aiDailyLimit);
+    await logOperation(env, 'config', '修改配置', configChanges.join(', '), request);
     
     return jsonResponse({ success: true });
   } catch (error) {
@@ -1907,6 +2319,104 @@ async function getStats(env) {
   }
 }
 
+// 获取图表数据
+async function getChartData(env) {
+  try {
+    // 获取近7日数据
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const startDate = sevenDaysAgo.toISOString().split('T')[0];
+
+    // 每日问答趋势
+    const dailyStats = await env.DB.prepare(`
+      SELECT date, answers_today as count 
+      FROM bot_stats 
+      WHERE date >= ? 
+      ORDER BY date ASC
+    `).bind(startDate).all();
+
+    // 填充缺失的日期
+    const dates = [];
+    const counts = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const displayDate = `${d.getMonth() + 1}/${d.getDate()}`;
+      dates.push(displayDate);
+      
+      const found = dailyStats.results?.find(r => r.date === dateStr);
+      counts.push(found ? found.count : 0);
+    }
+
+    // 热门问题 TOP5
+    const hotQuestions = await env.DB.prepare(`
+      SELECT message as question, COUNT(*) as count 
+      FROM answers 
+      WHERE created_at >= datetime('now', '-7 days')
+      GROUP BY message 
+      ORDER BY count DESC 
+      LIMIT 5
+    `).all();
+
+    // AI vs 知识库来源统计
+    const sourceStats = await env.DB.prepare(`
+      SELECT 
+        SUM(CASE WHEN source = 'ai' THEN 1 ELSE 0 END) as ai_count,
+        SUM(CASE WHEN source = 'knowledge_base' THEN 1 ELSE 0 END) as kb_count
+      FROM answers 
+      WHERE DATE(created_at) = DATE('now')
+    `).first();
+
+    return jsonResponse({
+      trend: { dates, counts },
+      hotQuestions: hotQuestions.results || [],
+      sourceStats: {
+        ai: sourceStats?.ai_count || 0,
+        knowledgeBase: sourceStats?.kb_count || 0
+      }
+    });
+  } catch (error) {
+    console.error('Chart data error:', error);
+    return jsonResponse({ 
+      trend: { dates: [], counts: [] }, 
+      hotQuestions: [], 
+      sourceStats: { ai: 0, knowledgeBase: 0 } 
+    });
+  }
+}
+
+// 记录操作日志
+async function logOperation(env, operationType, operationDesc, details, request) {
+  try {
+    const ipAddress = request?.headers?.get('CF-Connecting-IP') || '';
+    const userAgent = request?.headers?.get('User-Agent') || '';
+    
+    await env.DB.prepare(`
+      INSERT INTO operation_logs (operation_type, operation_desc, details, ip_address, user_agent)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(operationType, operationDesc, details, ipAddress, userAgent).run();
+  } catch (error) {
+    console.error('Log operation error:', error);
+  }
+}
+
+// 获取操作日志
+async function getOperationLogs(env) {
+  try {
+    const logs = await env.DB.prepare(`
+      SELECT * FROM operation_logs 
+      ORDER BY created_at DESC 
+      LIMIT 100
+    `).all();
+    
+    return jsonResponse(logs.results || []);
+  } catch (error) {
+    console.error('Get operation logs error:', error);
+    return jsonResponse([]);
+  }
+}
+
 // 调试统计
 async function getDebugStats(env) {
   try {
@@ -2110,6 +2620,9 @@ async function addKnowledge(request, env) {
       }
     }
     
+    // 记录操作日志
+    await logOperation(env, 'add', '添加知识库条目', '问题: ' + questions.join(', ').substring(0, 100), request);
+    
     return jsonResponse({ success: true, ids: answerIds });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
@@ -2174,10 +2687,19 @@ async function updateKnowledge(id, request, env) {
   }
 }
 
-async function deleteKnowledge(id, env) {
+async function deleteKnowledge(id, env, request) {
   try {
+    // 获取删除前的信息用于日志
+    const answerInfo = await env.DB.prepare(
+      'SELECT answer FROM knowledge_answers WHERE id = ?'
+    ).bind(id).first();
+    
     await env.DB.prepare('DELETE FROM knowledge_questions WHERE answer_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM knowledge_answers WHERE id = ?').bind(id).run();
+    
+    // 记录操作日志
+    await logOperation(env, 'delete', '删除知识库条目', 'ID: ' + id + (answerInfo ? ', 答案: ' + answerInfo.answer.substring(0, 50) : ''), request);
+    
     return jsonResponse({ success: true });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);

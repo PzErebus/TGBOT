@@ -128,6 +128,17 @@ VALUES (1, 1, 0, 1, 1, 0.6, 5, 100);
 INSERT OR IGNORE INTO bot_stats (date, answers_today, total_answers, ai_calls_today) 
 VALUES (DATE('now'), 0, 0, 0);
 
+-- 操作日志表
+CREATE TABLE IF NOT EXISTS operation_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation_type TEXT NOT NULL,
+  operation_desc TEXT NOT NULL,
+  details TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
@@ -141,3 +152,5 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_context_enabled ON knowledge_context(en
 CREATE INDEX IF NOT EXISTS idx_knowledge_context_priority ON knowledge_context(priority);
 CREATE INDEX IF NOT EXISTS idx_message_frequency_hash ON message_frequency(message_hash);
 CREATE INDEX IF NOT EXISTS idx_message_frequency_chat ON message_frequency(chat_id);
+CREATE INDEX IF NOT EXISTS idx_operation_logs_created_at ON operation_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_operation_logs_type ON operation_logs(operation_type);
