@@ -69,15 +69,44 @@ const adminHtml = `<!DOCTYPE html>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-3 py-4 md:px-4 md:py-8 max-w-6xl">
+        <!-- 移动端优化后的头部 -->
         <div class="flex justify-between items-center mb-4 md:mb-8">
-            <div class="flex-1"></div>
-            <h1 class="text-xl md:text-3xl font-bold text-center text-blue-600 flex-1">
-                <i class="fas fa-robot mr-2"></i><span class="hidden sm:inline">Telegram 知识库机器人管理</span><span class="sm:hidden">TG机器人管理</span>
+            <div class="flex items-center gap-2">
+                <button onclick="toggleMobileMenu()" class="sm:hidden bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg transition" title="菜单">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            <h1 class="text-lg sm:text-xl md:text-3xl font-bold text-center text-blue-600 flex-1 px-2">
+                <i class="fas fa-robot mr-1 md:mr-2"></i><span class="hidden sm:inline">Telegram 知识库机器人管理</span><span class="sm:hidden">TG机器人</span>
             </h1>
-            <div class="flex-1 flex justify-end">
-                <button onclick="toggleTheme()" id="themeToggle" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg transition" title="切换主题">
+            <div class="flex items-center gap-2">
+                <button onclick="toggleTheme()" id="themeToggle" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-2 py-1.5 md:px-3 md:py-2 rounded-lg transition text-sm md:text-base" title="切换主题">
                     <i class="fas fa-moon" id="themeIcon"></i>
                 </button>
+            </div>
+        </div>
+        
+        <!-- 移动端导航菜单 -->
+        <div id="mobileMenu" class="hidden sm:hidden mb-4 bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                <a href="#config" onclick="scrollToSection('config'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                    <i class="fas fa-cog mr-1"></i>配置
+                </a>
+                <a href="#context" onclick="scrollToSection('context'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                    <i class="fas fa-book-open mr-1"></i>前言
+                </a>
+                <a href="#knowledge" onclick="scrollToSection('knowledge'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                    <i class="fas fa-database mr-1"></i>知识库
+                </a>
+                <a href="#unanswered" onclick="scrollToSection('unanswered'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                    <i class="fas fa-question-circle mr-1"></i>未回答
+                </a>
+                <a href="#stats" onclick="scrollToSection('stats'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                    <i class="fas fa-chart-bar mr-1"></i>统计
+                </a>
+                <a href="#logs" onclick="scrollToSection('logs'); return false;" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                    <i class="fas fa-history mr-1"></i>日志
+                </a>
             </div>
         </div>
         
@@ -123,7 +152,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 配置面板 -->
-        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+        <div id="config" class="bg-white rounded-lg shadow mb-4 md:mb-8">
             <div class="p-4 md:p-6 border-b">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-cog mr-2"></i>机器人配置</h2>
             </div>
@@ -173,7 +202,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 前言内容管理 -->
-        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+        <div id="context" class="bg-white rounded-lg shadow mb-4 md:mb-8">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-book-open mr-2"></i>前言/背景知识管理</h2>
                 <button onclick="showContextModal()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
@@ -188,7 +217,7 @@ const adminHtml = `<!DOCTYPE html>
 
 
         <!-- 知识库管理 -->
-        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+        <div id="knowledge" class="bg-white rounded-lg shadow mb-4 md:mb-8">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-book mr-2"></i>知识库管理</h2>
                 <div class="flex flex-wrap gap-1.5 md:gap-2">
@@ -215,7 +244,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 未回答问题 -->
-        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+        <div id="unanswered" class="bg-white rounded-lg shadow mb-4 md:mb-8">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-question-circle mr-2"></i>未回答问题</h2>
                 <button onclick="loadUnanswered()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
@@ -228,7 +257,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 数据统计图表 -->
-        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+        <div id="stats" class="bg-white rounded-lg shadow mb-4 md:mb-8">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-chart-bar mr-2"></i>数据统计</h2>
                 <button onclick="loadCharts()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
@@ -260,7 +289,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 知识缺口分析 -->
-        <div class="bg-white rounded-lg shadow mb-4 md:mb-8">
+        <div id="gaps" class="bg-white rounded-lg shadow mb-4 md:mb-8">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-chart-line mr-2"></i>知识缺口分析</h2>
                 <button onclick="analyzeGaps()" class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition text-sm md:text-base">
@@ -273,7 +302,7 @@ const adminHtml = `<!DOCTYPE html>
         </div>
 
         <!-- 操作日志 -->
-        <div class="bg-white rounded-lg shadow">
+        <div id="logs" class="bg-white rounded-lg shadow">
             <div class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
                 <h2 class="text-lg md:text-xl font-semibold"><i class="fas fa-history mr-2"></i>操作日志</h2>
                 <div class="flex gap-2">
@@ -1328,6 +1357,71 @@ const adminHtml = `<!DOCTYPE html>
                 document.getElementById('operationLogsList').innerHTML = '<div class="text-center py-8 text-red-500">加载失败</div>';
             }
         }
+
+        // 移动端菜单切换
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            menu.classList.toggle('hidden');
+        }
+        
+        // 滚动到指定区域
+        function scrollToSection(sectionId) {
+            const element = document.getElementById(sectionId);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // 关闭移动端菜单
+                document.getElementById('mobileMenu').classList.add('hidden');
+            }
+        }
+
+        // 下拉刷新支持（移动端）
+        let touchStartY = 0;
+        let touchEndY = 0;
+        const minSwipeDistance = 100;
+        
+        document.addEventListener('touchstart', function(e) {
+            touchStartY = e.changedTouches[0].screenY;
+        }, false);
+        
+        document.addEventListener('touchend', function(e) {
+            touchEndY = e.changedTouches[0].screenY;
+            handleSwipe();
+        }, false);
+        
+        function handleSwipe() {
+            const swipeDistance = touchEndY - touchStartY;
+            // 只有在页面顶部下拉时才刷新
+            if (swipeDistance > minSwipeDistance && window.scrollY === 0) {
+                // 显示刷新提示
+                const refreshIndicator = document.createElement('div');
+                refreshIndicator.id = 'refreshIndicator';
+                refreshIndicator.className = 'fixed top-0 left-0 right-0 bg-blue-500 text-white text-center py-2 z-50 text-sm';
+                refreshIndicator.innerHTML = '<i class="fas fa-sync fa-spin mr-2"></i>刷新中...';
+                document.body.appendChild(refreshIndicator);
+                
+                // 刷新所有数据
+                Promise.all([
+                    loadStats(),
+                    loadKnowledgeBase(),
+                    loadUnanswered(),
+                    loadContext(),
+                    loadCharts(),
+                    loadOperationLogs()
+                ]).then(function() {
+                    setTimeout(function() {
+                        const indicator = document.getElementById('refreshIndicator');
+                        if (indicator) {
+                            indicator.remove();
+                        }
+                    }, 500);
+                });
+            }
+        }
+        
+        // 添加触摸反馈样式
+        const touchFeedbackStyle = document.createElement('style');
+        touchFeedbackStyle.textContent = '.touch-feedback:active { transform: scale(0.98); opacity: 0.9; } button, .clickable { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }';
+        document.head.appendChild(touchFeedbackStyle);
 
         // 初始化
         initTheme();
