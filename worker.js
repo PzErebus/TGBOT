@@ -1128,11 +1128,25 @@ const adminHtml = `<!DOCTYPE html>
                 }
                 
                 list.innerHTML = items.map(item => {
-                    const statusBadge = item.is_corrected 
-                        ? '<span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">已纠正</span>'
-                        : '<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">待审核</span>';
+                    let statusBadge;
+                    if (item.is_ignored) {
+                        statusBadge = '<span class="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded">已忽略</span>';
+                    } else if (item.is_corrected) {
+                        statusBadge = '<span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">已纠正</span>';
+                    } else {
+                        statusBadge = '<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">待审核</span>';
+                    }
                     
-                    return '<div class="border rounded-lg p-3 ' + (item.is_corrected ? 'bg-green-50 border-green-200' : 'bg-white') + '">' +
+                    const actionButtons = item.is_ignored 
+                        ? ''
+                        : '<button onclick="showCorrectModal(' + item.id + ')" class="text-purple-500 hover:text-purple-700 text-sm mr-3" title="纠正">' +
+                            '<i class="fas fa-edit mr-1"></i>纠正' +
+                          '</button>' +
+                          '<button onclick="ignoreAIResponse(' + item.id + ')" class="text-gray-500 hover:text-gray-700 text-sm" title="忽略">' +
+                            '<i class="fas fa-ban mr-1"></i>忽略' +
+                          '</button>';
+                    
+                    return '<div class="border rounded-lg p-3 ' + (item.is_ignored ? 'bg-gray-50 border-gray-200' : (item.is_corrected ? 'bg-green-50 border-green-200' : 'bg-white')) + '">' +
                         '<div class="flex flex-col sm:flex-row justify-between items-start gap-2">' +
                             '<div class="flex-1 min-w-0">' +
                                 '<div class="flex items-center gap-2 mb-1">' +
@@ -1145,11 +1159,7 @@ const adminHtml = `<!DOCTYPE html>
                                 '</div>' +
                                 (item.corrected_answer ? '<div class="text-sm text-green-700 bg-green-50 p-2 rounded mt-2"><strong>纠正后:</strong> ' + escapeHtml(item.corrected_answer) + '</div>' : '') +
                             '</div>' +
-                            '<div class="flex gap-2">' +
-                                '<button onclick="showCorrectModal(' + item.id + ')" class="text-purple-500 hover:text-purple-700 text-sm" title="纠正">' +
-                                    '<i class="fas fa-edit mr-1"></i>纠正' +
-                                '</button>' +
-                            '</div>' +
+                            '<div class="flex gap-2">' + actionButtons + '</div>' +
                         '</div>' +
                     '</div>';
                 }).join('');
@@ -1224,6 +1234,32 @@ const adminHtml = `<!DOCTYPE html>
                 }
             } catch (e) {
                 alert('纠正出错: ' + e.message);
+            }
+        }
+
+        // 忽略AI回复
+        async function ignoreAIResponse(id) {
+            if (!confirm('确定要忽略这个问题吗？忽略后下次同样的问题将不会回答。')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch('/manage/ai-responses/ignore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    alert('已忽略，下次同样问题将不会回答');
+                    loadAIResponses();
+                } else {
+                    alert('忽略失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('忽略出错: ' + e.message);
             }
         }
 
@@ -1929,6 +1965,11 @@ async function handleRequest(request, env) {
     return await correctAIResponse(request, env);
   }
   
+  // AI回复忽略
+  if (path === '/manage/ai-responses/ignore' && request.method === 'POST') {
+    return await ignoreAIResponse(request, env);
+  }
+  
   // AI回复详情
   const aiResponseMatch = path.match(/^\/manage\/ai-responses\/(\d+)$/);
   if (aiResponseMatch) {
@@ -2243,7 +2284,17 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
 
-    // 步骤2：在知识库中搜索最匹配的问题
+    // 步骤2：检查是否被忽略的问题
+    const ignoredRecord = await env.DB.prepare(
+      'SELECT id FROM ai_responses WHERE question = ? AND is_ignored = 1 LIMIT 1'
+    ).bind(cleanText).first();
+    
+    if (ignoredRecord) {
+      console.log('Question is ignored, skipping response:', cleanText);
+      return new Response('OK', { status: 200 });
+    }
+    
+    // 步骤3：在知识库中搜索最匹配的问题
     console.log('Searching knowledge base for:', cleanText);
     const matches = await findBestMatches(env, cleanText, config.maxContextItems || 5);
     console.log('Matches found:', matches.length, 'Best similarity:', matches[0]?.similarity);
@@ -2257,8 +2308,8 @@ async function handleTelegramWebhook(request, env) {
       let answerType;
       let aiResponseId = null;
       
-      if (config.useAIAnswer !== false && matches[0].similarity < 0.7) {
-        // 使用AI生成答案
+      if (config.useAIAnswer !== false && matches[0].similarity < 0.7 && cleanText.length >= 3) {
+        // 使用AI生成答案（仅当消息长度>=3个字时）
         responseText = await generateAIAnswer(env, cleanText, matches, config);
         answerType = 'ai';
         
@@ -2266,7 +2317,7 @@ async function handleTelegramWebhook(request, env) {
         try {
           const aiRecordResult = await env.DB.prepare(
             'INSERT INTO ai_responses (chat_id, user_id, user_name, question, original_answer, answer_type, similarity, knowledge_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-          ).bind(chatId, userId, userName, cleanText, responseText, 'ai', matches[0].similarity, matches[0].answerId).run();
+          ).bind(chatId, userId, userName, cleanText, responseText, 'ai', matches[0].similarity, matches[0].answer_id).run();
           aiResponseId = aiRecordResult.meta.last_row_id;
           console.log('AI response recorded, id:', aiResponseId);
         } catch (err) {
@@ -2465,12 +2516,56 @@ function isCasualChat(message) {
   const casualWords = [
     '嗯', '嗯嗯', '好的', '好', '你好', '嗨', '哈喽', 'hello', 'hi', 'hey',
     '谢谢', '多谢', '感谢', '不客气', '没事', '没关系',
-    '哈哈', '嘿嘿', '呵呵', '嘻嘻', '呵呵呵', '哈哈哈',
+    '哈哈', '嘿嘿', '呵呵', '嘻嘻', '呵呵呵', '哈哈哈', '笑死', '笑死我了', '哈哈哈', '哈哈哈哈',
     'ok', 'okay', '行', '可以', '没问题', '对的', '是的',
-    '拜拜', '再见', 'bye', 'goodbye', 'see you',
-    '在吗', '在', '不在', '在的',
-    '哦', '哦哦', '知道了', '明白', '了解', '收到',
-    '早安', '晚安', '早上好', '晚上好', '中午好'
+    '拜拜', '再见', 'bye', 'goodbye', 'see you', '回头见', '改天见', '有空聊',
+    '在吗', '在', '不在', '在的', '还在', '还在吗',
+    '哦', '哦哦', '知道了', '明白', '了解', '收到', '晓得了', '懂了', '明白明白',
+    '早安', '晚安', '早上好', '晚上好', '中午好', '下午好', '早', '晚',
+    // 情绪/状态词汇
+    '饿了', '饱了', '困了', '累了', '渴了', '病了', '难受', '舒服', '爽', '不爽',
+    '开心', '高兴', '难过', '伤心', '生气', '愤怒', '无聊', '有意思', '没意思',
+    '好吃', '难吃', '好喝', '好喝', '好看', '难看', '好听', '难听', '好闻', '难闻',
+    '好玩', '不好玩', '有趣', '无趣', '刺激', '淡定', '平静', '激动', '兴奋',
+    '害怕', '恐惧', '担心', '放心', '安心', '紧张', '放松', '压力大', '轻松',
+    '热', '冷', '暖和', '凉快', '冻死了', '热死了', '冷死了', '累死了', '困死了', '饿死了',
+    // 简单回应
+    '是的', '不是', '对', '不对', '没错', '错了', '真的', '假的',
+    '是啊', '不是啊', '对啊', '不对啊', '没错啊', '错了啊', '真的啊', '假的啊',
+    '嗯呢', '嗯呐', '嗯哼', '嗯好吧', '嗯好的', '嗯行', '嗯可以',
+    '好', '好了', '好啦', '好呀', '好啊', '好的呀', '好滴', '好哒', '好嘞', '好咧', '好哦', '好喔',
+    '行吧', '行啊', '行的', '行的吧', '行呀', '行哦',
+    '可以啊', '可以呀', '可以的', '可以吧', '可以哦',
+    '没问题啊', '没问题呀', '没问题的', '没问题哦',
+    // 疑问词
+    '什么', '怎么', '为什么', '哪里', '哪儿', '谁', '多少', '几', '什么时候',
+    '啥', '咋', '为啥', '咋了', '怎么了', '什么事', '什么情况', '什么意思',
+    // 日常用语
+    '吃饭', '睡觉', '起床', '上班', '下班', '回家', '出门', '外出', '回来', '到家',
+    '干嘛', '干什么', '做什么', '去哪', '去哪里', '走', '来了', '走了', '来过', '去过',
+    '等一下', '等会儿', '马上', '立刻', '现在', '待会儿', '稍后', '一会儿', '等一下下',
+    '稍等', '请稍等', '稍等一下', '稍等片刻', '马上好', '快了', '就好了', '再等一下',
+    '好的好的', '行行行', '可以可以', '对对对', '没错没错', '是的是的', '好好好',
+    '嗯嗯嗯', '哦哦哦', '知道知道', '明白明白', '了解了解', '收到收到',
+    // 网络用语
+    '666', '牛', '牛逼', '厉害', '强', '太强了', '赞', '棒', '优秀', '完美',
+    '卧槽', '我靠', '我去', '天啊', '天哪', '我的天', 'omg', 'oh my god',
+    '呵呵哒', '哈哈哒', '嘿嘿嘿', '哈哈哈', '笑哭', '哭笑不得', '无语', '服了',
+    '扎心', '心累', '崩溃', '抓狂', '暴躁', '淡定', '佛系', '躺平', '摆烂',
+    // 其他常用
+    '随便', '随意', '都行', '都可以', '看情况', '再说吧', '以后再说', '下次吧',
+    '不知道', '不清楚', '不了解', '不确定', '可能吧', '也许', '大概', '应该',
+    '好吧', '算了', '罢了', '而已', '罢了罢了', '算了算了', '就这样', '罢了而已',
+    '加油', '努力', '坚持', '别放弃', '你可以的', '相信自己', '最棒的', '最厉害的',
+    // 语气词/方言
+    '则了', '完了', '行了', '够了', '得了', '罢了', '而已', '罢了罢了',
+    '呗', '嘛', '呢', '啊', '呀', '哇', '哦', '哟', '喽', '咯',
+    '呗呗', '嘛嘛', '呢呢', '啊啊', '呀呀', '哇哇', '哦哦', '哟哟',
+    // 其他短句
+    '就这样', '就这样吧', '就这样了', '那就这样', '那就这样吧',
+    '好吧好吧', '算了算了', '罢了罢了', '而已而已', '得了得了',
+    '够了够了', '行了行了', '完了完了', '好了好了', '可以可以',
+    '对对', '好好', '行行', '是是', '嗯嗯', '哦哦', '啊啊'
   ];
   
   const messageLower = message.toLowerCase().trim();
@@ -2487,6 +2582,11 @@ function isCasualChat(message) {
   
   // 如果消息长度小于2且不是字母数字
   if (messageLower.length < 2 && !/[a-z0-9]/i.test(messageLower)) {
+    return true;
+  }
+  
+  // 如果消息以"了"结尾且长度小于4个字（如"好了"、"完了"、"则了"等）
+  if (messageLower.endsWith('了') && messageLower.length < 4) {
     return true;
   }
   
@@ -2611,9 +2711,9 @@ async function generateAIAnswer(env, userQuestion, matches, config) {
     
     let systemPrompt;
     if (contextText) {
-      systemPrompt = `你是客服助手。根据以下背景知识和知识库回答用户问题，简洁准确。\n\n背景知识：\n${contextText}\n\n知识库：\n${kbContext}`;
+      systemPrompt = `你是客服助手。请严格根据以下背景知识和知识库内容回答用户问题。\n\n重要规则：\n1. 只能使用知识库中提供的答案内容\n2. 不要添加知识库中没有的信息\n3. 不要自由发挥或编造内容\n4. 如果知识库中没有相关信息，请直接返回知识库中的第一个答案\n\n背景知识：\n${contextText}\n\n知识库：\n${kbContext}`;
     } else {
-      systemPrompt = `你是客服助手。根据知识库回答用户问题，简洁准确。\n\n知识库：\n${kbContext}`;
+      systemPrompt = `你是客服助手。请严格根据以下知识库内容回答用户问题。\n\n重要规则：\n1. 只能使用知识库中提供的答案内容\n2. 不要添加知识库中没有的信息\n3. 不要自由发挥或编造内容\n4. 如果知识库中没有相关信息，请直接返回知识库中的第一个答案\n\n知识库：\n${kbContext}`;
     }
 
     try {
@@ -3507,6 +3607,42 @@ async function correctAIResponse(request, env) {
     return jsonResponse({ success: true });
   } catch (error) {
     console.error('Correct AI response error:', error);
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+// 忽略AI回复
+async function ignoreAIResponse(request, env) {
+  try {
+    const body = await request.json();
+    const { id } = body;
+    
+    if (!id) {
+      return jsonResponse({ error: 'id is required' }, 400);
+    }
+    
+    // 获取原始记录
+    const original = await env.DB.prepare(
+      'SELECT * FROM ai_responses WHERE id = ?'
+    ).bind(id).first();
+    
+    if (!original) {
+      return jsonResponse({ error: 'Record not found' }, 404);
+    }
+    
+    // 更新为忽略状态
+    await env.DB.prepare(
+      'UPDATE ai_responses SET is_ignored = 1 WHERE id = ?'
+    ).bind(id).run();
+    
+    // 记录操作日志
+    await env.DB.prepare(
+      'INSERT INTO operation_logs (operation_type, operation_desc, details) VALUES (?, ?, ?)'
+    ).bind('ignore', '忽略AI回复', JSON.stringify({ id, question: original.question })).run();
+    
+    return jsonResponse({ success: true });
+  } catch (error) {
+    console.error('Ignore AI response error:', error);
     return jsonResponse({ error: error.message }, 500);
   }
 }
