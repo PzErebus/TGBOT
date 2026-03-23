@@ -148,13 +148,29 @@ Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/setWebhook?url=$we
 
 ```
 .
-├── worker.js              # 主程序代码（包含前端界面）
+├── worker.js              # 主程序代码（当前运行版本 v4.x）
 ├── v4_schema.sql          # 数据库结构
 ├── wrangler.toml          # Cloudflare 配置
 ├── package.json           # 项目依赖
 ├── README.md              # 项目说明
-└── qa.md                  # 知识库问答整理文档
+├── qa.md                  # 知识库问答整理文档
+├── v4-old/                # v4 历史版本备份
+│   ├── worker.js
+│   ├── v4_schema.sql
+│   └── qa.md
+└── v5-new/                # v5 开发版本（待测试）
+    ├── worker.js          # v5 主程序（P0+P1+P2）
+    ├── schema.sql         # v5 数据库结构
+    └── IMPROVEMENT_PLAN.md # 改进方案文档
 ```
+
+### 版本说明
+
+- **v4.x (当前稳定版)**：worker.js - 已部署运行，功能稳定
+- **v5.0 (开发中)**：位于 v5-new/ 文件夹，包含 P0/P1/P2 升级计划
+  - P0: AI意图分类器、相似度算法优化、对话上下文、回答缓存、情感分析
+  - P1: 智能问题推荐、多轮澄清、称呼风格配置、回答效果反馈
+  - P2: 数据库索引优化、批量操作、智能缓存预热
 
 ## 📝 更新日志
 
