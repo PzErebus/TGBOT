@@ -1,5 +1,5 @@
 // Telegram 智能知识库机器人
-// v5.0.0 - P4: +多轮澄清 +称呼风格
+// v5.0.0 - P5: +热度分析 +配额控制
 // 移除全局变量缓存，适配 Cloudflare Workers 执行模型
 
 export default {
@@ -2867,6 +2867,70 @@ function handleClarifyChoice(text, matches) {
     return { selected: true, match: matches[num - 1] };
   }
   return { selected: false };
+}
+
+// v5 P1-3: 热度分析
+async function analyzeHotnessStats(env) {
+  try {
+    const result = await env.DB.prepare(
+      "SELECT ka.id, ka.answer, ka.use_count FROM knowledge_answers ka WHERE ka.enabled = 1 ORDER BY ka.use_count DESC"
+    ).all();
+    
+    const hot = [];
+    const cold = [];
+    
+    for (const item of (result.results || [])) {
+      if ((item.use_count || 0) >= 10) {
+        hot.push({
+          id: item.id,
+          answer: item.answer.substring(0, 50),
+          useCount: item.use_count || 0
+        });
+      } else if ((item.use_count || 0) === 0) {
+        cold.push({
+          id: item.id,
+          answer: item.answer.substring(0, 50),
+          useCount: 0
+        });
+      }
+    }
+    
+    return { hot: hot.slice(0, 10), cold: cold.slice(0, 10) };
+  } catch (e) {
+    return { hot: [], cold: [] };
+  }
+}
+
+// v5 P2: 配额控制
+async function getQuotaStatus(env) {
+  try {
+    const [usageResult, configResult] = await Promise.all([
+      env.DB.prepare("SELECT COALESCE(SUM(neurons), 0) as total FROM ai_calls WHERE DATE(created_at) = DATE('now')").first(),
+      env.DB.prepare("SELECT ai_daily_limit FROM bot_config WHERE id = 1").first()
+    ]);
+    
+    const used = usageResult?.total || 0;
+    const limit = configResult?.ai_daily_limit || 9000;
+    const threshold = Math.floor(limit * 0.9);
+    
+    return {
+      used,
+      limit,
+      threshold,
+      remaining: Math.max(0, limit - used),
+      warningLevel: used >= threshold ? (used >= limit ? 'danger' : 'warning') : 'normal',
+      percentUsed: Math.round((used / limit) * 100)
+    };
+  } catch (e) {
+    return {
+      used: 0,
+      limit: 9000,
+      threshold: 8100,
+      remaining: 9000,
+      warningLevel: 'normal',
+      percentUsed: 0
+    };
+  }
 }
 
 // v5 P0-5: 情感分析
