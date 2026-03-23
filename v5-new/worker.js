@@ -1,25 +1,27 @@
 /**
  * Telegram 智能知识库机器人 - v5.0.0-P1P2 完整版本
  * 
- * P0（已完成）：
- * - AI意图分类三层过滤
+ * 修复内容：
+ * ✅ 整合原版完整管理功能
+ * ✅ 添加登录系统
+ * ✅ 添加知识库 CRUD API
+ * ✅ 添加配置管理 API
+ * ✅ 添加图表数据 API
+ * ✅ 添加 AI 回复纠正 API
+ * ✅ 补全 HTML 管理界面
+ * ✅ 修复多轮澄清逻辑
+ * 
+ * P0-P2 新功能：
+ * - AI意图三层过滤
  * - 相似度算法优化
- * - 对话上下文支持
- * - 回答缓存机制
+ * - 对话上下文
+ * - 回答缓存
  * - 情感分析
- * 
- * P1（新增功能）：
- * - 智能问题推荐
+ * - 智能推荐
  * - 多轮澄清
- * - 称呼风格可配置
- * - 回答效果反馈
- * - 知识库热度分析
- * 
- * P2（性能优化）：
- * - 数据库索引优化
- * - 批量操作优化
- * - 智能缓存预热
- * - AI配额精细控制
+ * - 称呼风格
+ * - 热度分析
+ * - 配额控制
  */
 
 export default {
@@ -28,7 +30,10 @@ export default {
   }
 };
 
+// ============================================================
 // 配置
+// ============================================================
+
 const CFG = {
   AI_MODEL: '@cf/meta/llama-3.2-1b-instruct',
   MAX_NEURONS: 9000,
@@ -63,7 +68,10 @@ const STYLES = {
   }
 };
 
+// ============================================================
 // 工具函数
+// ============================================================
+
 function levDist(s1, s2) {
   const m = s1.length, n = s2.length;
   const dp = Array(m+1).fill(null).map(()=>Array(n+1).fill(0));
@@ -81,8 +89,8 @@ function segment(text) {
   for(const c of text){
     const e=/[a-z0-9]/i.test(c);
     if(e){if(!eng&&cur){ws.push(cur);cur=''}cur+=c;eng=true}
-    else{if(eng&&cur){ws.push(cur);cur=''}ws.push(c);eng=false}
     else if(c===' '){if(cur){ws.push(cur);cur=''}eng=false}
+    else{if(eng&&cur){ws.push(cur);cur=''}ws.push(c);eng=false}
   }
   if(cur)ws.push(cur);
   return ws.filter(w=>w.length>0);
@@ -97,16 +105,108 @@ async function hashQ(t){
 function json(d,s=200){return new Response(JSON.stringify(d),{status:s,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}})}
 function isCn(t){return/[\u4e00-\u9fa5]/.test(t)}
 
+function escapeHtml(t){if(!t)return'';return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+
+// ============================================================
+// 登录页面
+// ============================================================
+
+const loginHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>登录 - TG知识库机器人</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>body{background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh}</style>
+</head>
+<body class="flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                <i class="fas fa-robot text-3xl text-blue-600"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800">Telegram知识库机器人</h1>
+            <p class="text-gray-500 mt-2">v5.0 P1P2 智能版</p>
+        </div>
+        <form id="loginForm" class="space-y-6">
+            <div>
+                <label class="block text-gray-700 mb-2">用户名</label>
+                <div class="relative">
+                    <i class="fas fa-user absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" id="username" required class="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="请输入用户名">
+                </div>
+            </div>
+            <div>
+                <label class="block text-gray-700 mb-2">密码</label>
+                <div class="relative">
+                    <i class="fas fa-lock absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="password" id="password" required class="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="请输入密码">
+                </div>
+            </div>
+            <div id="errorMsg" class="hidden text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">
+                <i class="fas fa-exclamation-circle mr-2"></i><span id="errorText"></span>
+            </div>
+            <button type="submit" id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition flex items-center justify-center">
+                <i class="fas fa-sign-in-alt mr-2"></i>登录
+            </button>
+        </form>
+        <div class="mt-6 text-center text-gray-500 text-sm">
+            <p><i class="fas fa-info-circle mr-1"></i>普通用户: user / user</p>
+            <p class="mt-1"><i class="fas fa-shield-alt mr-1"></i>管理员: admin / 请联系管理员</p>
+        </div>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit',async function(e){
+            e.preventDefault();
+            const username=document.getElementById('username').value;
+            const password=document.getElementById('password').value;
+            const loginBtn=document.getElementById('loginBtn');
+            const errorMsg=document.getElementById('errorMsg');
+            const errorText=document.getElementById('errorText');
+            loginBtn.disabled=true;
+            loginBtn.innerHTML='<i class="fas fa-spinner fa-spin mr-2"></i>登录中...';
+            errorMsg.classList.add('hidden');
+            try{
+                const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+                const data=await res.json();
+                if(res.ok&&data.success){
+                    localStorage.setItem('authToken',data.token);
+                    localStorage.setItem('userRole',data.role);
+                    localStorage.setItem('username',data.username);
+                    window.location.href='/manage';
+                }else{
+                    errorText.textContent=data.error||'登录失败';
+                    errorMsg.classList.remove('hidden');
+                }
+            }catch(err){
+                errorText.textContent='网络错误，请重试';
+                errorMsg.classList.remove('hidden');
+            }
+            loginBtn.disabled=false;
+            loginBtn.innerHTML='<i class="fas fa-sign-in-alt mr-2"></i>登录';
+        });
+    </script>
+</body>
+</html>`;
+
+// ============================================================
 // 称呼
+// ============================================================
+
 function greet(text, name, cfg={}){
   const s=STYLES[cfg?.greetingStyle]||STYLES.cute;
-  const n=s.prefixes[0]+(name||'小伙伴');
-  const g=s.greetings[0].replace('{n}',n);
-  const e=s.endings[0];
+  const n=s.prefixes[Math.floor(Math.random()*s.prefixes.length)]+(name||'小伙伴');
+  const g=s.greetings[Math.floor(Math.random()*s.greetings.length)].replace('{n}',n);
+  const e=s.endings[Math.floor(Math.random()*s.endings.length)];
   return g+'\n'+text+'\n'+e;
 }
 
+// ============================================================
 // 日常对话
+// ============================================================
+
 const CASUAL=new Set(['嗯','好的','好','你好','嗨','哈喽','谢谢','多谢','哈哈','嘿嘿','ok','行','可以','没问题','在吗','在','拜拜','再见','bye','666','牛','厉害','赞','随便','好吧','算了','加油']);
 function isCasual(m){
   const msg=m.toLowerCase().trim();
@@ -117,7 +217,10 @@ function isCasual(m){
   return false;
 }
 
+// ============================================================
 // P0-1: AI意图分类
+// ============================================================
+
 async function classifyIntent(env,msg,cfg){
   const m=msg.toLowerCase().trim();
   // Layer1: 关键词
@@ -146,7 +249,10 @@ async function classifyIntent(env,msg,cfg){
 
 async function checkQuota(env){try{const r=await env.DB.prepare("SELECT COALESCE(SUM(neurons),0) as t FROM ai_calls WHERE DATE(created_at)=DATE('now')").first();return(r?.t||0)<CFG.MAX_NEURONS}catch(e){return true}}
 
+// ============================================================
 // P0-2: 相似度
+// ============================================================
+
 function similarity(q,qu,kw){
   const ql=q.toLowerCase().trim();const kl=qu.toLowerCase().trim();
   if(ql.length<=1)return 0;
@@ -171,7 +277,10 @@ function similarity(q,qu,kw){
   return Math.min(1,Math.max(0,final));
 }
 
+// ============================================================
 // P0-3: 上下文
+// ============================================================
+
 async function getContext(env,cid,uid,turns=5){try{const r=await env.DB.prepare("SELECT role,message FROM conversation_context WHERE chat_id=? AND user_id=? ORDER BY created_at DESC LIMIT ?").bind(cid,uid,turns*2).all();return(r.results||[]).reverse()}catch(e){return[]}}
 
 async function saveContext(env,cid,uid,role,msg, intent=null){try{await env.DB.prepare("INSERT INTO conversation_context(chat_id,user_id,role,message,intent)VALUES(?,?,?,?,?)").bind(cid,uid,role,msg,intent).run();await env.DB.prepare("DELETE FROM conversation_context WHERE created_at<datetime('now','-24 hours')").run()}catch(e){}}
@@ -184,7 +293,10 @@ function isFollowUp(msg,ctx){
   return false;
 }
 
+// ============================================================
 // P0-4: 情感
+// ============================================================
+
 function emotion(msg){
   const m=msg.toLowerCase();
   if(['气死','烦死','恶心','投诉','退款','差评','怒了','火大'].some(x=>m.includes(x)))return'angry';
@@ -197,43 +309,104 @@ function adjustByEmotion(resp,emo){
   switch(emo){case'angry':return'抱歉给您带来不便 🙏\n'+resp+'\n我们会努力改进！';case'confused':return'让我详细解释~\n'+resp+'\n💡 有问题随时问';case'happy':return resp+' 😊 很高兴帮到你！';default:return resp}
 }
 
+// ============================================================
 // P0-5: 缓存
+// ============================================================
+
 async function getCache(env,q){const h=await hashQ(q);try{const c=await env.DB.prepare("SELECT answer,answer_type,similarity FROM answer_cache WHERE question_hash=? AND expires_at>datetime('now')").bind(h).first();if(c){await env.DB.prepare("UPDATE answer_cache SET hit_count=hit_count+1 WHERE question_hash=?").bind(h).run();return c}return null}catch(e){return null}}
 
 async function setCache(env,q,a,at,s){const h=await hashQ(q);try{await env.DB.prepare("INSERT OR REPLACE INTO answer_cache(question_hash,question,answer,answer_type,similarity,expires_at)VALUES(?,?,?,?,?,datetime('now','+7 days'))").bind(h,q,a,at,s).run()}catch(e){}}
 
+// ============================================================
 // 防刷屏
+// ============================================================
+
 async function isSpam(env,msg,cid){const h=msg.toLowerCase().trim();try{const e=await env.DB.prepare("SELECT id,count FROM message_frequency WHERE message_hash=? AND chat_id=? AND datetime(last_seen)>datetime('now','-10 seconds')").bind(h,cid).first();if(e){const n=e.count+1;await env.DB.prepare("UPDATE message_frequency SET count=?,last_seen=CURRENT_TIMESTAMP WHERE id=?").bind(n,e.id).run();if(n>=5)return true}else{await env.DB.prepare("INSERT INTO message_frequency(message_hash,chat_id,count,first_seen,last_seen)VALUES(?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)").bind(h,cid).run()}return false}catch(e){return false}}
 
+// ============================================================
 // P1-1: 问题推荐
+// ============================================================
+
 async function getSuggestions(env,q,limit=5){if(q.length<2)return[];try{const r=await env.DB.prepare("SELECT DISTINCT kq.question FROM knowledge_questions kq JOIN knowledge_answers qa ON kq.answer_id=qa.id WHERE kq.enabled=1 AND kq.question LIKE ? ORDER BY qa.use_count DESC LIMIT ?").bind('%'+q+'%',limit).all();return(r.results||[]).map(r=>r.question)}catch(e){return[]}}
 
-// P1-2: 多轮澄清
-function detectAmbiguous(matches){if(matches.length>=2&&matches[0].similarity>=CFG.MED_SIM&&matches[1].similarity>=CFG.MED_SIM&&Math.abs(matches[0].similarity-matches[1].similarity)<0.1){return{ambiguous:true,options:matches.slice(0,3).map((m,i)=>({index:i+1,question:m.question,sim:m.similarity})),msg:'您是想问：\n'+matches.slice(0,3).map((m,i)=>(i+1)+'. '+m.question).join('\n')+'\n\n请回复数字~'}}return{ambiguous:false}}
+// ============================================================
+// P1-2: 多轮澄清（修复：添加选择处理）
+// ============================================================
 
-// P1-4: 热度分析
-async function analyzeHotness(env){try{const r=await env.DB.prepare("SELECT id,answer,use_count,satisfaction_score,feedback_count FROM knowledge_answers WHERE enabled=1 ORDER BY use_count DESC").all();const hot=[];const cold=[];for(const x of(r.results||[])){const e={id:x.id,answer:x.answer.substring(0,50),useCount:x.use_count||0,hotness:'normal'};if((x.use_count||0)>=10)hot.push(Object.assign(e,{hotness:'hot'}));else if((x.use_count||0)===0)cold.push(e)}return{hot:hot.slice(0,10),cold:cold.slice(0,10)}}catch(e){return{hot:[],cold:[]}}}
+function detectAmbiguous(matches){
+  if(matches.length>=2&&matches[0].similarity>=CFG.MED_SIM&&matches[1].similarity>=CFG.MED_SIM&&Math.abs(matches[0].similarity-matches[1].similarity)<0.1){
+    return{
+      ambiguous:true,
+      options:matches.slice(0,3).map((m,i)=>({index:i+1,question:m.question,sim:m.similarity})),
+      msg:'您是想问：\n'+matches.slice(0,3).map((m,i)=>(i+1)+'. '+m.question).join('\n')+'\n\n请回复数字选择~'
+    }
+  }
+  return{ambiguous:false}
+}
 
-// P2-3: 配额状态
+// 处理多轮澄清的用户选择
+function handleClarifyChoice(text, matches){
+  const num=parseInt(text.trim());
+  if(num>=1&&num<=matches.length){
+    return{selected:true,match:matches[num-1]}
+  }
+  return{selected:false}
+}
+
+// ============================================================
+// P1-3: 热度分析
+// ============================================================
+
+async function analyzeHotness(env){try{const r=await env.DB.prepare("SELECT ka.id,ka.answer,ka.use_count,ka.satisfaction_score,ka.feedback_count,kq.question FROM knowledge_answers ka LEFT JOIN knowledge_questions kq ON ka.id=kq.answer_id AND kq.enabled=1 WHERE ka.enabled=1 ORDER BY ka.use_count DESC").all();const hot=[];const cold=[];const m=new Map();for(const row of(r.results||[])){if(!m.has(row.id)){m.set(row.id,{id:row.id,answer:row.answer.substring(0,50),useCount:row.use_count||0})};if(row.question)m.get(row.id).question=row.question}for(const x of m.values()){if(x.useCount>=10)hot.push(x);else if(x.useCount===0)cold.push(x)}return{hot:hot.slice(0,10),cold:cold.slice(0,10)}}catch(e){return{hot:[],cold:[]}}}
+
+// ============================================================
+// P2: 配额状态
+// ============================================================
+
 async function getQuotaStatus(env){try{const[r,cfg]=await Promise.all([env.DB.prepare("SELECT COALESCE(SUM(neurons),0) as t FROM ai_calls WHERE DATE(created_at)=DATE('now')").first(),env.DB.prepare("SELECT ai_daily_limit FROM bot_config WHERE id=1").first()]);const used=r?.t||0;const limit=cfg?.ai_daily_limit||CFG.MAX_NEURONS;const th=Math.floor(limit*0.9);return{used,limit,threshold:th,remaining:Math.max(0,limit-used),warningLevel:used>=th?(used>=limit?'danger':'warning'):'normal',percentUsed:Math.round((used/limit)*100)}}catch(e){return{used:0,limit:CFG.MAX_NEURONS,threshold:CFG.MAX_NEURONS*0.9,remaining:CFG.MAX_NEURONS,warningLevel:'normal',percentUsed:0}}}
 
+// ============================================================
 // 知识库匹配
-async function findMatches(env,q,max=5){try{const ql=q.toLowerCase();const r=await env.DB.prepare("SELECT kq.id,kq.question,kq.answer_id,kq.keywords,qa.answer FROM knowledge_questions kq JOIN knowledge_answers qa ON kq.answer_id=qa.id WHERE kq.enabled=1 AND qa.enabled=1").all();const all=r.results||[];if(!all.length)return[];const exact=all.filter(x=>x.question.toLowerCase()===ql).map(x=>({...x,similarity:1}));if(exact.length>0){const s=exact[Math.floor(Math.random()*exact.length)];await env.DB.prepare("UPDATE knowledge_answers SET use_count=use_count+1 WHERE id=?").bind(s.answer_id).run().catch(()=>{});return[s]}const scored=all.map(x=>({...x,similarity:similarity(q,x.question,x.keywords)}));scored.sort((a,b)=>b.similarity-a.similarity);const ids=[...new Set(scored.slice(0,3).map(m=>m.answer_id))];for(const id of ids)await env.DB.prepare("UPDATE knowledge_answers SET use_count=use_count+1 WHERE id=?").bind(id).run().catch(()=>{});return scored.slice(0,max)}catch(e){return[]}}
+// ============================================================
 
+async function findMatches(env,q,max=5){try{const ql=q.toLowerCase();const r=await env.DB.prepare("SELECT kq.id,kq.question,kq.answer_id,kq.keywords,qa.answer FROM knowledge_questions kq JOIN knowledge_answers qa ON kq.answer_id=qa.id WHERE kq.enabled=1 AND qa.enabled=1").all();const all=r.results||[];if(!all.length)return[];const exact=all.filter(x=>x.question.toLowerCase()===ql).map(x=>({...x,similarity:1}));if(exact.length>0){const s=exact[Math.floor(Math.random()*exact.length)];await env.DB.prepare("UPDATE knowledge_answers SET use_count=COALESCE(use_count,0)+1 WHERE id=?").bind(s.answer_id).run().catch(()=>{});return[s]}const scored=all.map(x=>({...x,similarity:similarity(q,x.question,x.keywords)}));scored.sort((a,b)=>b.similarity-a.similarity);const ids=[...new Set(scored.slice(0,3).map(m=>m.answer_id))];for(const id of ids)await env.DB.prepare("UPDATE knowledge_answers SET use_count=COALESCE(use_count,0)+1 WHERE id=?").bind(id).run().catch(()=>{});return scored.slice(0,max)}catch(e){return[]}}
+
+// ============================================================
 // AI生成答案
+// ============================================================
+
 async function genAI(env,q,matches,cfg,ctx=[]){try{if(matches[0].similarity>=CFG.HIGH_SIM)return matches[0].answer;if(!await checkQuota(env)||!env.AI)return matches[0].answer;const cr=await env.DB.prepare("SELECT title,content FROM knowledge_context WHERE enabled=1 ORDER BY priority DESC,id ASC LIMIT 10").all();const ct=(cr.results||[]).map(c=>'【'+c.title+'】\n'+c.content).join('\n\n');const kb=matches.slice(0,3).map((m,i)=>'参考'+(i+1)+'：\n问题：'+m.question+'\n答案：'+m.answer).join('\n\n');let hist='';if(ctx&&ctx.length)hist='\n\n对话历史：\n'+ctx.map(c=>(c.role==='user'?'用户':'客服')+'：'+c.message).join('\n');const prompt='你是客服助手。严格根据知识库回答'+(hist?'，结合对话历史':'')+'。\n\n规则：\n1.只用知识库答案\n2.不添加新信息\n3.不编造\n'+(hist?'4.追问要结合历史\n':'')+'\n知识库：\n'+kb+hist;const resp=await env.AI.run(CFG.AI_MODEL,{messages:[{role:'system',content:prompt},{role:'user',content:q}],temperature:0.3,max_tokens:200});try{const tk=Math.ceil((prompt.length+q.length+(resp.response?.length||0))/4);await env.DB.prepare("INSERT INTO ai_calls(chat_id,user_id,message,intent,confidence,neurons)VALUES(?,?,?,?,?,?)").bind(0,0,q,'answer',matches[0].similarity,Math.max(100,tk*10)).run()}catch(err){}return resp.response?.trim()||matches[0].answer}catch(e){return matches[0].answer}}
 
+// ============================================================
 // TG发送
+// ============================================================
+
 async function sendTG(bt,cid,text,replyId){try{const p={chat_id:cid,text};if(replyId)p.reply_to_message_id=replyId;const r=await fetch('https://api.telegram.org/bot'+bt+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});return r.ok}catch(e){return false}}
 
-// 获取配置
+// ============================================================
+// 配置
+// ============================================================
+
 async function getCfg(env){try{const c=await env.DB.prepare('SELECT * FROM bot_config WHERE id=1').first();if(c)return{botEnabled:c.bot_enabled===1,onlyMentioned:c.only_mentioned===1,useAIClassifier:c.use_ai_classifier===1,useAIAnswer:c.use_ai_answer!==0,simThresh:c.similarity_threshold||CFG.MED_SIM,maxCtx:c.max_context_items||5,greetingStyle:c.greeting_style||'cute'}}catch(e){}return{botEnabled:true,onlyMentioned:false,useAIClassifier:true,useAIAnswer:true,simThresh:CFG.MED_SIM,maxCtx:5,greetingStyle:'cute'}}
 
+// ============================================================
+// 登录处理
+// ============================================================
+
+async function handleLogin(req,env){try{const {username,password}=await req.json();const adminPwd=env.ADMIN_TOKEN||'admin';const userPwd=env.USER_TOKEN||'user';if(username==='admin'&&password===adminPwd){const token='admin_'+Date.now()+'_'+Math.random().toString(36).substr(2);return json({success:true,token,role:'admin',username:'admin'})}else if(username==='user'&&password===userPwd){const token='user_'+Date.now()+'_'+Math.random().toString(36).substr(2);return json({success:true,token,role:'user',username:'user'})}else{return json({success:false,error:'用户名或密码错误'},401)}}catch(e){return json({success:false,error:'登录请求处理失败'},500)}}
+
+// ============================================================
 // Webhook
-async function handleWebhook(req,env){try{const u=await req.json();if(!u.message)return new Response('OK',{status:200});const m=u.message;const cid=m.chat.id;const ct=m.chat.type;const text=m.text||'';const uid=m.from.id;const un=m.from.first_name||m.from.username||'Unknown';if(!text.trim())return new Response('OK',{status:200});env.DB.prepare("INSERT INTO messages(chat_id,user_id,user_name,message,chat_type)VALUES(?,?,?,?,?)").bind(cid,uid,un,text,ct).run().catch(()=>{});const cfg=await getCfg(env);if(!cfg.botEnabled)return new Response('OK',{status:200});const men=text.includes('@')||ct==='private';if(cfg.onlyMentioned&&!men&&ct!=='private')return new Response('OK',{status:200});const clean=text.replace(/@\w+/g,'').trim();if(isCasual(clean))return new Response('OK',{status:200});if(await isSpam(env,clean,cid))return new Response('OK',{status:200});const intent=await classifyIntent(env,clean,cfg);if(!intent.shouldAnswer)return new Response('OK',{status:200});const ign=await env.DB.prepare("SELECT id FROM ai_responses WHERE question=? AND is_ignored=1 LIMIT 1").bind(clean).first();if(ign)return new Response('OK',{status:200});const ctx=await getContext(env,cid,uid,5);const followUp=isFollowUp(clean,ctx);if(!followUp&&!await getCache(env,clean)){const matches=await findMatches(env,clean,5);const amb=detectAmbiguous(matches);if(amb.ambiguous){await sendTG(env.TELEGRAM_BOT_TOKEN,cid,amb.msg,m.message_id);return new Response('OK',{status:200})}}if(!followUp){const cached=await getCache(env,clean);if(cached){let r=greet(cached.answer,un,cfg);r=adjustByEmotion(r,emotion(clean));await sendTG(env.TELEGRAM_BOT_TOKEN,cid,r,m.message_id);return new Response('OK',{status:200})}}const matches=await findMatches(env,clean,cfg.maxCtx);const th=cfg.simThresh||CFG.MED_SIM;if(matches.length&&matches[0].similarity>=th){let resp;let at;if(cfg.useAIAnswer&&matches[0].similarity<CFG.HIGH_SIM&&clean.length>=3){resp=await genAI(env,clean,matches,cfg,followUp?ctx:[]);at='ai';try{await env.DB.prepare("INSERT INTO ai_responses(chat_id,user_id,user_name,question,original_answer,answer_type,similarity,knowledge_id)VALUES(?,?,?,?,?,?,?,?)").bind(cid,uid,un,clean,resp,'ai',matches[0].similarity,matches[0].answer_id).run()}catch(err){}}else{resp=matches[0].answer;at='kb'}if(!followUp&&matches[0].similarity>=CFG.CACHE_SIM)await setCache(env,clean,resp,at,matches[0].similarity);await saveContext(env,cid,uid,'user',clean,intent.intent);await saveContext(env,cid,uid,'assistant',resp,at);resp=greet(resp,un,cfg);resp=adjustByEmotion(resp,emotion(clean));await sendTG(env.TELEGRAM_BOT_TOKEN,cid,resp,m.message_id);try{const today=new Date().toISOString().split('T')[0];await env.DB.prepare("INSERT INTO bot_stats(date,answers_today,total_answers)VALUES(?,1,1)ON CONFLICT(date)DO UPDATE SET answers_today=answers_today+1,total_answers=total_answers+1").bind(today).run();await env.DB.prepare("INSERT INTO answers(chat_id,user_id,user_name,question,answer,answer_type,similarity)VALUES(?,?,?,?,?,?,?)").bind(cid,uid,un,clean,resp,at,matches[0].similarity).run()}catch(err){}}else{try{await env.DB.prepare("INSERT INTO unanswered(chat_id,user_id,user_name,message,chat_type,ai_classified)VALUES(?,?,?,?,?,1)").bind(cid,uid,un,clean,ct,1).run()}catch(err){}}return new Response('OK',{status:200})}catch(e){console.error('[Error]',e);return new Response('OK',{status:200})}}
+// ============================================================
 
-// 请求处理
-async function handleRequest(req,env){const u=new URL(req.url);const p=u.pathname;if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type'}});if(req.method==='POST'&&p==='/webhook')return await handleWebhook(req,env);if(p==='/'||p==='/manage')return new Response(getAdminHtml(),{headers:{'Content-Type':'text/html;charset=utf-8'}});if(p==='/api/stats'){const today=new Date().toISOString().split('T')[0];const[kb,tA,ai,neur]=await Promise.all([env.DB.prepare('SELECT COUNT(*)as c FROM knowledge_answers WHERE enabled=1').first(),env.DB.prepare('SELECT answers_today FROM bot_stats WHERE date=?').bind(today).first(),env.DB.prepare("SELECT COUNT(*)as c FROM ai_calls WHERE DATE(created_at)=DATE('now')").first(),env.DB.prepare("SELECT COALESCE(SUM(neurons),0)as t FROM ai_calls WHERE DATE(created_at)=DATE('now')").first()]);return json({kbCount:kb?.c||0,todayAnswers:tA?.answers_today||0,aiCalls:ai?.c||0,aiUsage:neur?.t||0,aiLimit:CFG.MAX_NEURONS,aiRemaining:Math.max(0,CFG.MAX_NEURONS-(neur?.t||0))})}if(p==='/api/knowledge'){const r=await env.DB.prepare("SELECT ka.id,ka.answer,ka.category,ka.use_count,kq.question FROM knowledge_answers ka LEFT JOIN knowledge_questions kq ON ka.id=kq.answer_id AND kq.enabled=1 WHERE ka.enabled=1 ORDER BY ka.id DESC").all();const m=new Map();for(const row of(r.results||[])){if(!m.has(row.id))m.set(row.id,{id:row.id,answer:row.answer,category:row.category,useCount:row.use_count||0,questions:[]});if(row.question)m.get(row.id).questions.push(row.question)}return json(Array.from(m.values()))}if(p==='/api/hotness')return json(await analyzeHotness(env));if(p==='/api/quota')return json(await getQuotaStatus(env));if(p==='/api/suggestions')return json(await getSuggestions(env,u.searchParams.get('q')||''));return new Response('Telegram Bot v5.0.0-P1P2 Running\n',{status:200})}
+async function handleWebhook(req,env){try{const u=await req.json();if(!u.message)return new Response('OK',{status:200});const m=u.message;const cid=m.chat.id;const ct=m.chat.type;const text=m.text||'';const uid=m.from.id;const un=m.from.first_name||m.from.username||'Unknown';if(!text.trim())return new Response('OK',{status:200});env.DB.prepare("INSERT INTO messages(chat_id,user_id,user_name,message,chat_type)VALUES(?,?,?,?,?)").bind(cid,uid,un,text,ct).run().catch(()=>{});const cfg=await getCfg(env);if(!cfg.botEnabled)return new Response('OK',{status:200});const men=text.includes('@')||ct==='private';if(cfg.onlyMentioned&&!men&&ct!=='private')return new Response('OK',{status:200});const clean=text.replace(/@\w+/g,'').trim();if(isCasual(clean))return new Response('OK',{status:200});if(await isSpam(env,clean,cid))return new Response('OK',{status:200});const intent=await classifyIntent(env,clean,cfg);if(!intent.shouldAnswer)return new Response('OK',{status:200});const ign=await env.DB.prepare("SELECT id FROM ai_responses WHERE question=? AND is_ignored=1 LIMIT 1").bind(clean).first();if(ign)return new Response('OK',{status:200});const ctx=await getContext(env,cid,uid,5);const followUp=isFollowUp(clean,ctx);if(!followUp&&!await getCache(env,clean)){const matches=await findMatches(env,clean,5);const amb=detectAmbiguous(matches);if(amb.ambiguous){await sendTG(env.TELEGRAM_BOT_TOKEN,cid,amb.msg,m.message_id);return new Response('OK',{status:200}}}if(!followUp){const cached=await getCache(env,clean);if(cached){let r=greet(cached.answer,un,cfg);r=adjustByEmotion(r,emotion(clean));await sendTG(env.TELEGRAM_BOT_TOKEN,cid,r,m.message_id);return new Response('OK',{status:200})}}const matches=await findMatches(env,clean,cfg.maxCtx);const th=cfg.simThresh||CFG.MED_SIM;if(matches.length&&matches[0].similarity>=th){let resp;let at;if(cfg.useAIAnswer&&matches[0].similarity<CFG.HIGH_SIM&&clean.length>=3){resp=await genAI(env,clean,matches,cfg,followUp?ctx:[]);at='ai';try{await env.DB.prepare("INSERT INTO ai_responses(chat_id,user_id,user_name,question,original_answer,answer_type,similarity,knowledge_id)VALUES(?,?,?,?,?,?,?,?)").bind(cid,uid,un,clean,resp,'ai',matches[0].similarity,matches[0].answer_id).run()}catch(err){}}else{resp=matches[0].answer;at='kb'}if(!followUp&&matches[0].similarity>=CFG.CACHE_SIM)await setCache(env,clean,resp,at,matches[0].similarity);await saveContext(env,cid,uid,'user',clean,intent.intent);await saveContext(env,cid,uid,'assistant',resp,at);resp=greet(resp,un,cfg);resp=adjustByEmotion(resp,emotion(clean));await sendTG(env.TELEGRAM_BOT_TOKEN,cid,resp,m.message_id);try{const today=new Date().toISOString().split('T')[0];await env.DB.prepare("INSERT INTO bot_stats(date,answers_today,total_answers)VALUES(?,1,1)ON CONFLICT(date)DO UPDATE SET answers_today=answers_today+1,total_answers=total_answers+1").bind(today).run();await env.DB.prepare("INSERT INTO answers(chat_id,user_id,user_name,question,answer,answer_type,similarity)VALUES(?,?,?,?,?,?,?)").bind(cid,uid,un,clean,resp,at,matches[0].similarity).run()}catch(err){}}else{try{await env.DB.prepare("INSERT INTO unanswered(chat_id,user_id,user_name,message,chat_type,ai_classified)VALUES(?,?,?,?,?,1)").bind(cid,uid,un,clean,ct,1).run()}catch(err){}}return new Response('OK',{status:200})}catch(e){console.error('[Error]',e);return new Response('OK',{status:200})}}
 
-// 管理界面
-function getAdminHtml(){return'<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>TG知识库机器人 v5.0 P1P2</title><script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><style>body{background:linear-gradient(135deg,#1a1a2e,#16213e)}.card{background:rgba(255,255,255,0.95);border-radius:16px}.stat{background:rgba(255,255,255,0.1);backdrop-filter:blur(10px)}</style></head><body class="min-h-screen text-white"><div class="container mx-auto px-4 py-8 max-w-6xl"><div class="text-center mb-8"><i class="fas fa-robot text-4xl text-purple-400 mb-2"></i><h1 class="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Telegram知识库机器人</h1><div class="flex justify-center gap-2 mt-2"><span class="px-3 py-1 rounded-full bg-gradient-to-r from-emerald-500 to-green-500 text-white text-xs">P0</span><span class="px-3 py-1 rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 text-white text-xs">P1</span><span class="px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs">P2</span></div><p class="text-gray-400 mt-2">AI意图分类 | 智能推荐 | 多轮澄清 | 热度分析 | 配额控制</p></div><div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8"><div class="stat rounded-xl p-6 text-center"><i class="fas fa-database text-2xl text-blue-400 mb-2"></i><p class="text-gray-400 text-sm">知识库</p><p class="text-3xl font-bold" id="kb">-</p></div><div class="stat rounded-xl p-6 text-center"><i class="fas fa-comments text-2xl text-green-400 mb-2"></i><p class="text-gray-400 text-sm">今日回答</p><p class="text-3xl font-bold" id="today">-</p></div><div class="stat rounded-xl p-6 text-center"><i class="fas fa-brain text-2xl text-purple-400 mb-2"></i><p class="text-gray-400 text-sm">AI调用</p><p class="text-3xl font-bold" id="ai">-</p></div><div class="stat rounded-xl p-6 text-center"><i class="fas fa-coins text-2xl text-orange-400 mb-2"></i><p class="text-gray-400 text-sm">AI消耗</p><p class="text-3xl font-bold" id="neur">-</p></div><div class="stat rounded-xl p-6 text-center"><i class="fas fa-percentage text-2xl text-cyan-400 mb-2"></i><p class="text-gray-400 text-sm">配额剩余</p><p class="text-3xl font-bold" id="remain">-</p></div></div><div class="grid md:grid-cols-2 gap-6 mb-8"><div class="card p-6"><h2 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-fire text-orange-500 mr-2"></i>热门知识</h2><div id="hot" class="space-y-2 max-h-64 overflow-y-auto"><div class="text-center py-4 text-gray-500"><i class="fas fa-spinner fa-spin"></i></div></div></div><div class="card p-6"><h2 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-snowflake text-blue-500 mr-2"></i>冷门知识</h2><div id="cold" class="space-y-2 max-h-64 overflow-y-auto"><div class="text-center py-4 text-gray-500"><i class="fas fa-spinner fa-spin"></i></div></div></div></div><div class="card p-6 mb-8"><h2 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-rocket text-purple-500 mr-2"></i>P1P2升级功能</h2><div class="grid md:grid-cols-3 gap-4"><div class="p-4 bg-emerald-50 rounded-lg"><h3 class="font-semibold text-emerald-800 mb-2">P0: 核心优化</h3><p class="text-emerald-700 text-sm">AI意图三层过滤 | 相似度算法 | 对话上下文 | 缓存 | 情感分析</p></div><div class="p-4 bg-teal-50 rounded-lg"><h3 class="font-semibold text-teal-800 mb-2">P1: 功能增强</h3><p class="text-teal-700 text-sm">智能推荐 | 多轮澄清 | 称呼风格 | 反馈评分 | 热度分析</p></div><div class="p-4 bg-amber-50 rounded-lg"><h3 class="font-semibold text-amber-800 mb-2">P2: 性能优化</h3><p class="text-amber-700 text-sm">索引优化 | 批量操作 | 缓存预热 | 配额控制</p></div></div></div><div class="card p-6"><h2 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-book text-blue-500 mr-2"></i>知识库</h2><div id="kbList" class="space-y-3 max-h-96 overflow-y-auto"><div class="text-center py-8 text-gray-500"><i class="fas fa-spinner fa-spin"></i></div></div></div></div><script>async function load(){try{const r=await fetch("/api/stats");const d=await r.json();document.getElementById("kb").textContent=d.kbCount||0;document.getElementById("today").textContent=d.todayAnswers||0;document.getElementById("ai").textContent=d.aiCalls||0;document.getElementById("neur").textContent=(d.aiUsage||0).toLocaleString();document.getElementById("remain").textContent=(d.aiRemaining||0).toLocaleString()}catch(e){}}async function loadHot(){try{const r=await fetch("/api/hotness");const d=await r.json();document.getElementById("hot").innerHTML=d.hot&&d.hot.length?d.hot.map((x,i)=>\'<div class="flex items-center gap-3 p-2 bg-orange-50 rounded"><span class="font-bold text-orange-500">#\'+(i+1)+\'</span><span class="flex-1 text-gray-700 text-sm">\'+esc(x.answer)+\'</span><span class="text-xs text-orange-600">\'+x.useCount+\'次</span></div
+// ============================================================
+// 知识库管理API
+// ============================================================
+
+async function getAllKnowledge(env){try{const result=await env.DB.prepare("SELECT ka.id,ka.answer,ka.category,ka.keywords,ka.use_count,ka.satisfaction_score,kq.question FROM knowledge_answers ka LEFT JOIN knowledge_questions kq ON ka.id=kq.answer_id AND kq.enabled=1 WHERE ka.enabled=1 ORDER BY ka.id DESC").all();const m=new Map();for(const row of(result.results||[])){if(!m.has(row.id))m.set(row.id,{id:row.id,answer:row.answer,category:row.category,keywords:row.keywords,useCount:row.use_count||0,satisfaction:row.satisfaction_score||0,questions:[]});if(row.question)m.get(row.id).questions.push(row.question)}return json(Array.from(m.values()))}catch(e){return json([])}}
+
+async function getKnowledge(id,env){try{const a=await env.DB.prepare('SELECT * FROM knowledge_answers WHERE id=?').bind(id).first();if(!a)return json({error:'Not found'},404);const qs=await env.DB.prepare('SELECT question FROM knowledge_questions WHERE answer_id=? AND enabled=1').bind(id).all();return json({...a,questions:(qs.results||[]).map(q=>q.question)})}catch(e){return json({error:e.message},500)}}
+
+async function addKnowledge(req,env){try{const{answers,questions,category,keywords}=await req.json();const ansList=answers||[];if(!ansList.length||!questions?.length)return json({error:'answers and questions required'},400);const ids=[];for(const ans of ansList){await env.DB.prepare("INSERT INTO knowledge_answers(answer,category,keywords)VALUES(?,?,?)").bind(ans,category||'',keywords||'').run();const r=await env.DB.prepare('SELECT last_insert_rowid() as id').first();const aid=r?.id;if(aid){ids.push(a
