@@ -1,5 +1,5 @@
 // Telegram 智能知识库机器人
-// v5.0.0 - P2: +对话上下文 +回答缓存
+// v5.0.0 - P3: +情感分析 +智能推荐
 // 移除全局变量缓存，适配 Cloudflare Workers 执行模型
 
 export default {
@@ -2812,6 +2812,61 @@ function simpleHash(str) {
     hash = hash & hash;
   }
   return hash.toString(16);
+}
+
+// v5 P0-5: 情感分析
+function analyzeEmotion(message) {
+  const m = message.toLowerCase();
+  // 愤怒情绪
+  if (['气死', '烦死', '恶心', '投诉', '退款', '差评', '怒了', '火大', '垃圾', '骗子', '坑人', '滚', '傻逼', '他妈的'].some(x => m.includes(x))) {
+    return 'angry';
+  }
+  // 开心情绪
+  if (['谢谢', '太好了', '太棒了', '爱你', '么么哒', '好评', '感谢', '给力', '厉害', '赞', '完美', '优秀', '不错', '好用'].some(x => m.includes(x))) {
+    return 'happy';
+  }
+  // 困惑情绪
+  if (['不懂', '不明白', '怎么回事', '搞不懂', '晕', '迷糊', '懵', '啥', '什么鬼', '怎么用', '不会用', '求助'].some(x => m.includes(x))) {
+    return 'confused';
+  }
+  return 'neutral';
+}
+
+function adjustResponseByEmotion(response, emotion) {
+  switch (emotion) {
+    case 'angry':
+      return '抱歉给您带来不便 🙏\n' + response + '\n我们会努力改进！';
+    case 'confused':
+      return '让我详细解释~\n' + response + '\n💡 有问题随时问';
+    case 'happy':
+      return response + ' 😊 很高兴帮到你！';
+    default:
+      return response;
+  }
+}
+
+// v5 P0-6: 智能推荐（基于热度）
+async function getSmartRecommendations(env, category = null, limit = 3) {
+  try {
+    let sql = `
+      SELECT kq.question, ka.use_count, ka.satisfaction_score 
+      FROM knowledge_questions kq 
+      JOIN knowledge_answers ka ON kq.answer_id = ka.id 
+      WHERE kq.enabled = 1 AND ka.enabled = 1
+    `;
+    if (category) {
+      sql += ` AND ka.category = ?`;
+    }
+    sql += ` ORDER BY (ka.use_count * 0.6 + ka.satisfaction_score * 0.4) DESC LIMIT ?`;
+    
+    const result = category 
+      ? await env.DB.prepare(sql).bind(category, limit).all()
+      : await env.DB.prepare(sql).bind(limit).all();
+    
+    return result.results || [];
+  } catch (e) {
+    return [];
+  }
 }
 
 // AI生成答案
