@@ -2332,6 +2332,10 @@ async function handleTelegramWebhook(request, env) {
       // 添加个性化称呼
       responseText = addPersonalizedGreeting(responseText, userName);
       
+      // v5: 情感分析调整
+      const emotion = analyzeEmotion(cleanText);
+      responseText = adjustResponseByEmotion(responseText, emotion);
+      
       // 发送消息
       console.log('Preparing to send message to Telegram');
       console.log('Chat ID:', chatId);
