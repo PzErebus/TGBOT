@@ -2557,6 +2557,21 @@ async function isSpamMessage(env, message, chatId) {
 
 // 检查是否为日常对话（不需要记录和回答）
 function isCasualChat(message) {
+  const messageLower = message.toLowerCase().trim();
+  
+  // v5: 如果消息包含强烈情绪词，不视为日常对话，需要处理
+  const emotionWords = [
+    // 愤怒
+    '气死', '烦死', '恶心', '投诉', '退款', '差评', '怒了', '火大', '垃圾', '骗子', '坑人',
+    // 困惑
+    '不懂', '不明白', '怎么回事', '搞不懂', '晕', '迷糊', '懵', '什么鬼', '不会用', '求助',
+    // 开心（但可能包含问题）
+    '太棒了', '完美', '优秀', '好用'
+  ];
+  if (emotionWords.some(w => messageLower.includes(w))) {
+    return false;
+  }
+  
   const casualWords = [
     '嗯', '嗯嗯', '好的', '好', '你好', '嗨', '哈喽', 'hello', 'hi', 'hey',
     '谢谢', '多谢', '感谢', '不客气', '没事', '没关系',
@@ -2611,8 +2626,6 @@ function isCasualChat(message) {
     '够了够了', '行了行了', '完了完了', '好了好了', '可以可以',
     '对对', '好好', '行行', '是是', '嗯嗯', '哦哦', '啊啊'
   ];
-  
-  const messageLower = message.toLowerCase().trim();
   
   // 如果消息完全匹配日常词汇，或者是单个标点符号
   if (casualWords.includes(messageLower)) {
