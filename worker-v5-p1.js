@@ -1,5 +1,5 @@
 // Telegram 智能知识库机器人
-// v5.0.0 - P1: AI意图三层过滤 + 相似度算法优化
+// v5.0.0 - P2: +对话上下文 +回答缓存
 // 移除全局变量缓存，适配 Cloudflare Workers 执行模型
 
 export default {
@@ -2738,6 +2738,80 @@ function levenshteinDistance(str1, str2) {
     }
   }
   return matrix[str2.length][str1.length];
+}
+
+// v5 P0-3: 对话上下文管理
+async function getConversationContext(env, chatId, userId, maxTurns = 5) {
+  try {
+    const result = await env.DB.prepare(
+      "SELECT role, message FROM conversation_context WHERE chat_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?"
+    ).bind(chatId, userId, maxTurns * 2).all();
+    return (result.results || []).reverse();
+  } catch (e) {
+    return [];
+  }
+}
+
+async function saveConversationContext(env, chatId, userId, role, message, intent = null) {
+  try {
+    await env.DB.prepare(
+      "INSERT INTO conversation_context(chat_id, user_id, role, message, intent) VALUES(?, ?, ?, ?, ?)"
+    ).bind(chatId, userId, role, message, intent).run();
+    // 清理24小时前的记录
+    await env.DB.prepare(
+      "DELETE FROM conversation_context WHERE created_at < datetime('now', '-24 hours')"
+    ).run();
+  } catch (e) {}
+}
+
+// 判断是否为追问
+function isFollowUpQuestion(message, context) {
+  const m = message.toLowerCase();
+  const indicators = ['然后呢', '那', '还有呢', '为什么', '怎么办', '怎么处理', '然后', '不是说', '可是', '但是', '具体', '详细'];
+  if (indicators.some(i => m.startsWith(i) || m.includes(i))) return true;
+  if (context && context.length > 0) {
+    const pronouns = ['它', '那个', '这个', '上面', '刚才', '之前'];
+    if (pronouns.some(p => m.includes(p)) && m.length < 15) return true;
+  }
+  return false;
+}
+
+// v5 P0-4: 回答缓存
+async function getCachedAnswer(env, question) {
+  try {
+    const hash = simpleHash(question.toLowerCase().trim());
+    const result = await env.DB.prepare(
+      "SELECT answer, answer_type, similarity, hit_count FROM answer_cache WHERE question_hash = ? AND expires_at > datetime('now')"
+    ).bind(hash).first();
+    if (result) {
+      // 更新命中次数
+      await env.DB.prepare(
+        "UPDATE answer_cache SET hit_count = hit_count + 1, last_hit = datetime('now') WHERE question_hash = ?"
+      ).bind(hash).run();
+      return result;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function saveCachedAnswer(env, question, answer, answerType, similarity) {
+  try {
+    const hash = simpleHash(question.toLowerCase().trim());
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO answer_cache(question_hash, question, answer, answer_type, similarity, expires_at) VALUES(?, ?, ?, ?, ?, datetime('now', '+7 days'))"
+    ).bind(hash, question, answer, answerType, similarity).run();
+  } catch (e) {}
+}
+
+// 简单哈希函数
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(16);
 }
 
 // AI生成答案
