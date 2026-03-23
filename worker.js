@@ -2329,12 +2329,9 @@ async function handleTelegramWebhook(request, env) {
         answerType = 'kb';
       }
       
-      // 添加个性化称呼
-      responseText = addPersonalizedGreeting(responseText, userName);
-      
-      // v5: 情感分析调整
+      // v5: 整合称呼和情感分析
       const emotion = analyzeEmotion(cleanText);
-      responseText = adjustResponseByEmotion(responseText, emotion);
+      responseText = addPersonalizedGreetingWithEmotion(responseText, userName, emotion);
       
       // 发送消息
       console.log('Preparing to send message to Telegram');
@@ -2832,37 +2829,6 @@ function simpleHash(str) {
 }
 
 // v5 P0-7: 称呼风格配置
-const GREETING_STYLES = {
-  cute: {
-    prefixes: ['喂，', '嘿，', '哟，', '啊，', '哼，', '啧，', '哎，', '喂喂，', '哎呀，'],
-    suffixes: ['小笨蛋', '小迷糊', '小懒虫', '小馋猫', '小淘气', '小傻瓜', '小机灵鬼', '小话痨', '小可爱'],
-    greetings: ['😤 {n}，听好了！', '🙄 {n}，这个问题还要问？', '😒 {n}，看清楚了：', '😏 {n}，这么简单都不知道？'],
-    endings: ['💬 还有问题就继续问吧~', '✨ 记住了没？', '🎯 明白了吗？']
-  },
-  professional: {
-    prefixes: ['您好，', '尊敬的用户，'],
-    suffixes: ['用户', '朋友'],
-    greetings: ['您好，以下是相关信息：', '感谢咨询，解答如下：'],
-    endings: ['如有其他问题请随时提问。', '希望对您有帮助。']
-  },
-  friendly: {
-    prefixes: ['嘿~ ', '哈喽 ', '你好呀 '],
-    suffixes: ['同学', '小伙伴'],
-    greetings: ['👋 {n}，来告诉你：', '😊 {n}，看这里：'],
-    endings: ['有问题随时找我哦~', '加油！✨']
-  }
-};
-
-// 生成带称呼的回复
-function generateGreetingResponse(text, name, config = {}) {
-  const style = GREETING_STYLES[config?.greetingStyle] || GREETING_STYLES.cute;
-  const prefix = style.prefixes[Math.floor(Math.random() * style.prefixes.length)];
-  const nickname = prefix + (name || '小伙伴');
-  const greeting = style.greetings[Math.floor(Math.random() * style.greetings.length)].replace('{n}', nickname);
-  const ending = style.endings[Math.floor(Math.random() * style.endings.length)];
-  return greeting + '\n' + text + '\n' + ending;
-}
-
 // v5 P0-8: 多轮澄清
 function detectAmbiguousMatches(matches) {
   if (matches.length >= 2 && 
@@ -2966,19 +2932,6 @@ function analyzeEmotion(message) {
     return 'confused';
   }
   return 'neutral';
-}
-
-function adjustResponseByEmotion(response, emotion) {
-  switch (emotion) {
-    case 'angry':
-      return '抱歉给您带来不便 🙏\n' + response + '\n我们会努力改进！';
-    case 'confused':
-      return '让我详细解释~\n' + response + '\n💡 有问题随时问';
-    case 'happy':
-      return response + ' 😊 很高兴帮到你！';
-    default:
-      return response;
-  }
 }
 
 // v5 P0-6: 智能推荐（基于热度）
@@ -3128,126 +3081,51 @@ function getPersonalizedNickname(userName) {
   return prefix + (userName || '小伙伴') + suffix;
 }
 
-// 为回答添加个性化称呼前缀（奶凶风格）
-function addPersonalizedGreeting(responseText, userName) {
+// v5: 整合称呼和情感分析的回复生成
+function addPersonalizedGreetingWithEmotion(responseText, userName, emotion) {
   const nickname = getPersonalizedNickname(userName);
-  const greetings = [
-    `😤 ${nickname}，听好了！`,
-    `🙄 ${nickname}，这个问题还要问？`,
-    `😒 ${nickname}，看清楚了：`,
-    `😏 ${nickname}，这么简单都不知道？`,
-    `😐 ${nickname}，给你说一次：`,
-    `😑 ${nickname}，记住了啊：`,
-    `🙃 ${nickname}，真是拿你没办法：`,
-    `😶 ${nickname}，自己看吧：`,
-    `😌 ${nickname}，让我告诉你：`,
-    `🤨 ${nickname}，认真听着：`,
-    `😬 ${nickname}，别走神啊：`,
-    `🫤 ${nickname}，就这一次啊：`,
-    `😮‍💨 ${nickname}，叹气...`,
-    `🤦 ${nickname}，扶额...`,
-    `😵‍💫 ${nickname}，晕...`,
-    `🤐 ${nickname}，好吧好吧：`,
-    `😡 ${nickname}，气死我了！`,
-    `🥺 ${nickname}，求求你用用脑子吧：`,
-    `😤 ${nickname}，我要生气了！`,
-    `🙃 ${nickname}，你是不是故意的？`,
-    `😒 ${nickname}，我怀疑你在耍我：`,
-    `🤔 ${nickname}，让我想想怎么说你才能懂：`,
-    `😏 ${nickname}，准备好记笔记了吗？`,
-    `😐 ${nickname}，我尽量说简单点：`,
-    `😌 ${nickname}，深呼吸...不生气：`,
-    `🤷 ${nickname}，我也没办法了：`,
-    `😅 ${nickname}，这个问题有点意思：`,
-    `🙄 ${nickname}，你确定你没问过吗？`,
-    `😤 ${nickname}，最后一次了啊！`,
-    `😶 ${nickname}，我无语了...`,
-    `🫠 ${nickname}，我的耐心正在消失：`,
-    `😵 ${nickname}，被你打败了：`,
-    `🤦‍♀️ ${nickname}，让我静静...`,
-    `😮 ${nickname}，这你都不知道？`,
-    `🙃 ${nickname}，我投降了：`,
-    `😤 ${nickname}，严肃点！`,
-    `🤨 ${nickname}，你认真听了吗？`,
-    `😒 ${nickname}，我再说最后一遍：`,
-    `🙄 ${nickname}，你是不是没睡醒？`,
-    `😌 ${nickname}，慢慢说，不着急：`,
-    `🤗 ${nickname}，虽然你很笨，但我还是告诉你吧：`
-  ];
-  const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-
-  const endings = [
-    `💬 还有问题就继续问吧~`,
-    `✨ 记住了没？`,
-    `🎯 明白了吗？`,
-    `💡 懂了吗小迷糊？`,
-    `😌 这下清楚了吧？`,
-    `📝 记在小本本上啊！`,
-    `🤗 不客气啦~`,
-    `😏 下次别再问这个了哈！`,
-    `🙄 再不懂我就...我就再讲一遍！`,
-    `😤 这可是最后一次了啊！`,
-    `🤨 真的记住了？别骗我哦~`,
-    `😒 我讲得这么清楚，再不会打你哦`,
-    `🫠 我的耐心快被你耗光了...`,
-    `🙃 你这个小迷糊，真拿你没办法`,
-    `😮‍💨 叹气...你怎么这么笨呢`,
-    `🤦 扶额...我太难了`,
-    `😵 被你问得头晕...`,
-    `🤐 算了算了，你自己琢磨吧`,
-    `😌 终于讲完了，累死我了`,
-    `🙏 求求你记住吧，别再问了`,
-    `💢 哼！下次自己查！`,
-    `🌟 好了好了，去玩吧小淘气`,
-    `🎉 恭喜你，又学会了一个知识点！`,
-    `🏃 溜了溜了，问别人去吧~`,
-    `😤 记住了吗？没记住我也不管了！`,
-    `🙄 我真的尽力了...`,
-    `😒 你要是再忘，我就...我就哭给你看！`,
-    `🤷 反正我说了，听没听随你`,
-    `😅 我讲得口干舌燥，你听懂了吗？`,
-    `🙃 好了好了，别再折磨我了`,
-    `😌 终于解脱了...`,
-    `🤗 虽然你很笨，但我还是爱你的~`,
-    `😏 下次问点有难度的，这个太简单了`,
-    `😐 我怀疑你在测试我的耐心`,
-    `😤 最后一次！真的是最后一次！`,
-    `🙄 你是不是故意来气我的？`,
-    `😒 我再说一遍，这次真的最后一遍！`,
-    `🫠 我的天，你怎么还在问这个`,
-    `😵 被你打败了，彻底打败了`,
-    `🤐 好了，我闭嘴了`,
-    `😌 呼...终于说完了`,
-    `🙏 拜托拜托，记住吧`,
-    `💢 哼！不理你了！`,
-    `🌟 乖~记住了就奖励你一颗糖`,
-    `🎉 撒花~你又变聪明了一点！`,
-    `🏃 拜拜了您嘞~`,
-    `😤 记住了啊！下次再问我就生气了！`,
-    `🙄 我真的服了你了...`,
-    `😒 你要是再记不住，我就...我就...算了`,
-    `🤷 随便吧，反正我说了`,
-    `😅 哈哈，你是不是觉得我很凶？`,
-    `🙃 好了好了，不凶你了`,
-    `😌 深呼吸，不生气，不生气`,
-    `🤗 抱抱~虽然你笨笨的`,
-    `😏 下次记得请我吃糖哦~`,
-    `😐 我说完了，你自便`,
-    `😤 记住了！记住了！记住了！`,
-    `🙄 你是不是在故意逗我玩？`,
-    `😒 我累了，真的累了`,
-    `🫠 我的耐心值：0%`,
-    `😵 被你问得怀疑人生...`,
-    `🤐 好了，我去静静`,
-    `😌 终于结束了...`,
-    `🙏 感谢收听，下次再见`,
-    `💢 哼！下次问别人去！`,
-    `🌟 好了，去玩吧，别烦我了`,
-    `🎉 恭喜毕业！这个问题你学会了！`,
-    `🏃 我溜了，你慢慢消化`
-  ];
-  const ending = endings[Math.floor(Math.random() * endings.length)];
-
+  
+  // 根据情绪选择不同的称呼风格
+  let greeting, ending;
+  
+  switch (emotion) {
+    case 'angry':
+      // 用户愤怒时，用安抚语气
+      greeting = `🙏 ${nickname}，非常抱歉给您带来不便！`;
+      ending = `😔 我们会努力改进，如果还有其他问题请随时告诉我~`;
+      break;
+    case 'confused':
+      // 用户困惑时，用耐心解释语气
+      greeting = `💡 ${nickname}，让我详细为您解释：`;
+      ending = `🤗 如果还有不清楚的地方，随时问我哦~`;
+      break;
+    case 'happy':
+      // 用户开心时，用友好语气
+      greeting = `😊 ${nickname}，很高兴为您服务！`;
+      ending = `🎉 有其他问题随时找我，祝您使用愉快！`;
+      break;
+    default:
+      // 默认奶凶风格
+      const defaultGreetings = [
+        `😤 ${nickname}，听好了！`,
+        `🙄 ${nickname}，这个问题还要问？`,
+        `😒 ${nickname}，看清楚了：`,
+        `😏 ${nickname}，这么简单都不知道？`,
+        `😐 ${nickname}，给你说一次：`,
+        `😌 ${nickname}，让我告诉你：`,
+        `🤨 ${nickname}，认真听着：`
+      ];
+      const defaultEndings = [
+        `💬 还有问题就继续问吧~`,
+        `✨ 记住了没？`,
+        `🎯 明白了吗？`,
+        `🤗 不客气啦~`,
+        `😏 下次别再问这个了哈！`
+      ];
+      greeting = defaultGreetings[Math.floor(Math.random() * defaultGreetings.length)];
+      ending = defaultEndings[Math.floor(Math.random() * defaultEndings.length)];
+  }
+  
   return `${greeting}\n${responseText}\n${ending}`;
 }
 
