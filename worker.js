@@ -1,5 +1,5 @@
 // Telegram 智能知识库机器人
-// v5.0.0 - P3: +情感分析 +智能推荐
+// v5.0.0 - P4: +多轮澄清 +称呼风格
 // 移除全局变量缓存，适配 Cloudflare Workers 执行模型
 
 export default {
@@ -2812,6 +2812,61 @@ function simpleHash(str) {
     hash = hash & hash;
   }
   return hash.toString(16);
+}
+
+// v5 P0-7: 称呼风格配置
+const GREETING_STYLES = {
+  cute: {
+    prefixes: ['喂，', '嘿，', '哟，', '啊，', '哼，', '啧，', '哎，', '喂喂，', '哎呀，'],
+    suffixes: ['小笨蛋', '小迷糊', '小懒虫', '小馋猫', '小淘气', '小傻瓜', '小机灵鬼', '小话痨', '小可爱'],
+    greetings: ['😤 {n}，听好了！', '🙄 {n}，这个问题还要问？', '😒 {n}，看清楚了：', '😏 {n}，这么简单都不知道？'],
+    endings: ['💬 还有问题就继续问吧~', '✨ 记住了没？', '🎯 明白了吗？']
+  },
+  professional: {
+    prefixes: ['您好，', '尊敬的用户，'],
+    suffixes: ['用户', '朋友'],
+    greetings: ['您好，以下是相关信息：', '感谢咨询，解答如下：'],
+    endings: ['如有其他问题请随时提问。', '希望对您有帮助。']
+  },
+  friendly: {
+    prefixes: ['嘿~ ', '哈喽 ', '你好呀 '],
+    suffixes: ['同学', '小伙伴'],
+    greetings: ['👋 {n}，来告诉你：', '😊 {n}，看这里：'],
+    endings: ['有问题随时找我哦~', '加油！✨']
+  }
+};
+
+// 生成带称呼的回复
+function generateGreetingResponse(text, name, config = {}) {
+  const style = GREETING_STYLES[config?.greetingStyle] || GREETING_STYLES.cute;
+  const prefix = style.prefixes[Math.floor(Math.random() * style.prefixes.length)];
+  const nickname = prefix + (name || '小伙伴');
+  const greeting = style.greetings[Math.floor(Math.random() * style.greetings.length)].replace('{n}', nickname);
+  const ending = style.endings[Math.floor(Math.random() * style.endings.length)];
+  return greeting + '\n' + text + '\n' + ending;
+}
+
+// v5 P0-8: 多轮澄清
+function detectAmbiguousMatches(matches) {
+  if (matches.length >= 2 && 
+      matches[0].similarity >= 0.6 && 
+      matches[1].similarity >= 0.6 && 
+      Math.abs(matches[0].similarity - matches[1].similarity) < 0.1) {
+    return {
+      ambiguous: true,
+      options: matches.slice(0, 3).map((m, i) => ({ index: i + 1, question: m.question, sim: m.similarity })),
+      msg: '您是想问：\n' + matches.slice(0, 3).map((m, i) => (i + 1) + '. ' + m.question).join('\n') + '\n\n请回复数字选择~'
+    };
+  }
+  return { ambiguous: false };
+}
+
+function handleClarifyChoice(text, matches) {
+  const num = parseInt(text.trim());
+  if (num >= 1 && num <= matches.length) {
+    return { selected: true, match: matches[num - 1] };
+  }
+  return { selected: false };
 }
 
 // v5 P0-5: 情感分析
