@@ -2284,6 +2284,37 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
 
+    // v5 P0-8: 检查是否是澄清选择（数字回复）
+    const clarificationContext = await env.DB.prepare(
+      'SELECT message FROM conversation_context WHERE chat_id = ? AND user_id = ? AND intent = ? ORDER BY created_at DESC LIMIT 1'
+    ).bind(chatId, userId, 'clarification').first();
+    
+    if (clarificationContext) {
+      try {
+        const contextData = JSON.parse(clarificationContext.message);
+        if (contextData.type === 'clarification') {
+          const choice = handleClarifyChoice(cleanText, contextData.matches);
+          if (choice.selected) {
+            console.log('User selected clarification option:', choice.match.question);
+            let responseText = addPersonalizedGreetingWithEmotion(choice.match.answer, userName, analyzeEmotion(cleanText));
+            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
+            
+            // 记录回答
+            await recordAnswer(env, chatId, userId, userName, cleanText, choice.match.answer, 'kb', choice.match.similarity);
+            
+            // 清除澄清状态
+            await env.DB.prepare(
+              'DELETE FROM conversation_context WHERE chat_id = ? AND user_id = ? AND intent = ?'
+            ).bind(chatId, userId, 'clarification').run();
+            
+            return new Response('OK', { status: 200 });
+          }
+        }
+      } catch (e) {
+        console.error('Clarification handling error:', e);
+      }
+    }
+
     // 步骤2：检查是否被忽略的问题
     const ignoredRecord = await env.DB.prepare(
       'SELECT id FROM ai_responses WHERE question = ? AND is_ignored = 1 LIMIT 1'
@@ -2294,7 +2325,23 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
     
-    // 步骤3：在知识库中搜索最匹配的问题
+    // 步骤3：检查回答缓存
+    const cachedAnswer = await getCachedAnswer(env, cleanText);
+    if (cachedAnswer) {
+      console.log('Cache hit for question:', cleanText);
+      let responseText = addPersonalizedGreetingWithEmotion(cachedAnswer.answer, userName, analyzeEmotion(cleanText));
+      await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
+      
+      // 记录回答
+      try {
+        await recordAnswer(env, chatId, userId, userName, cleanText, cachedAnswer.answer, cachedAnswer.answer_type, cachedAnswer.similarity);
+      } catch (err) {
+        console.error('Record answer error:', err);
+      }
+      return new Response('OK', { status: 200 });
+    }
+    
+    // 步骤4：在知识库中搜索最匹配的问题
     console.log('Searching knowledge base for:', cleanText);
     const matches = await findBestMatches(env, cleanText, config.maxContextItems || 5);
     console.log('Matches found:', matches.length, 'Best similarity:', matches[0]?.similarity);
@@ -2304,13 +2351,30 @@ async function handleTelegramWebhook(request, env) {
     if (matches.length > 0 && matches[0].similarity >= threshold) {
       console.log('Match found, preparing to send response');
       console.log('Sending response with similarity:', matches[0].similarity);
+      
+      // v5 P0-8: 检测是否需要多轮澄清
+      const clarification = detectAmbiguousMatches(matches);
+      if (clarification.ambiguous) {
+        console.log('Ambiguous matches detected, asking for clarification');
+        await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, clarification.msg, message.message_id);
+        
+        // 保存澄清状态到上下文（简化实现：直接保存到数据库）
+        await env.DB.prepare(
+          'INSERT INTO conversation_context (chat_id, user_id, role, message, intent) VALUES (?, ?, ?, ?, ?)'
+        ).bind(chatId, userId, 'system', JSON.stringify({ type: 'clarification', matches: matches.slice(0, 3) }), 'clarification').run();
+        
+        return new Response('OK', { status: 200 });
+      }
+      
       let responseText;
       let answerType;
       let aiResponseId = null;
       
       if (config.useAIAnswer !== false && matches[0].similarity < 0.7 && cleanText.length >= 3) {
         // 使用AI生成答案（仅当消息长度>=3个字时）
-        responseText = await generateAIAnswer(env, cleanText, matches, config);
+        // v5 P0-3: 获取对话上下文
+        const conversationContext = await getConversationContext(env, chatId, userId, 3);
+        responseText = await generateAIAnswer(env, cleanText, matches, config, conversationContext);
         answerType = 'ai';
         
         // 记录AI回复
@@ -2341,6 +2405,10 @@ async function handleTelegramWebhook(request, env) {
       const sendResult = await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
       console.log('Send result:', sendResult);
       
+      // v5 P0-3: 保存对话上下文
+      await saveConversationContext(env, chatId, userId, 'user', cleanText, 'question');
+      await saveConversationContext(env, chatId, userId, 'assistant', responseText, answerType);
+      
       // 同步记录（确保数据写入）
       try {
         const today = new Date().toISOString().split('T')[0];
@@ -2351,6 +2419,9 @@ async function handleTelegramWebhook(request, env) {
         
         await recordAnswer(env, chatId, userId, userName, cleanText, responseText, answerType, matches[0].similarity);
         console.log('Answer recorded successfully');
+        
+        // v5 P0-4: 保存到缓存
+        await saveCachedAnswer(env, cleanText, matches[0].answer, answerType, matches[0].similarity);
       } catch (err) {
         console.error('Record error:', err);
       }
@@ -2983,7 +3054,7 @@ async function getSmartRecommendations(env, category = null, limit = 3) {
 }
 
 // AI生成答案
-async function generateAIAnswer(env, userQuestion, matches, config) {
+async function generateAIAnswer(env, userQuestion, matches, config, conversationContext = []) {
   try {
     console.log('generateAIAnswer called, similarity:', matches[0].similarity);
     
@@ -2992,6 +3063,10 @@ async function generateAIAnswer(env, userQuestion, matches, config) {
       console.log('High similarity, skipping AI');
       return matches[0].answer;
     }
+    
+    // v5 P0-3: 检测是否是追问
+    const isFollowUp = conversationContext.length > 0 && isFollowUpQuestion(userQuestion, conversationContext);
+    console.log('Is follow-up question:', isFollowUp);
     
     // 检查AI每日neurons消耗配额（免费额度10000，超过90%即9000时暂停）
     const FREE_TIER_LIMIT = 10000;
@@ -3033,11 +3108,21 @@ async function generateAIAnswer(env, userQuestion, matches, config) {
     }
     console.log('AI is available, proceeding with AI call');
     
+    // v5 P0-3: 构建对话上下文文本
+    let contextHistory = '';
+    if (conversationContext.length > 0) {
+      contextHistory = '\n\n对话历史：\n' + conversationContext.map(c =>
+        `${c.role === 'user' ? '用户' : '客服'}: ${c.message}`
+      ).join('\n');
+    }
+
     let systemPrompt;
+    const baseRules = `重要规则：\n1. 只能使用知识库中提供的答案内容\n2. 不要添加知识库中没有的信息\n3. 不要自由发挥或编造内容\n4. 如果知识库中没有相关信息，请直接返回知识库中的第一个答案${isFollowUp ? '\n5. 用户正在追问，请结合对话历史给出连贯的回复' : ''}`;
+
     if (contextText) {
-      systemPrompt = `你是客服助手。请严格根据以下背景知识和知识库内容回答用户问题。\n\n重要规则：\n1. 只能使用知识库中提供的答案内容\n2. 不要添加知识库中没有的信息\n3. 不要自由发挥或编造内容\n4. 如果知识库中没有相关信息，请直接返回知识库中的第一个答案\n\n背景知识：\n${contextText}\n\n知识库：\n${kbContext}`;
+      systemPrompt = `你是客服助手。请严格根据以下背景知识和知识库内容回答用户问题。${contextHistory}\n\n${baseRules}\n\n背景知识：\n${contextText}\n\n知识库：\n${kbContext}`;
     } else {
-      systemPrompt = `你是客服助手。请严格根据以下知识库内容回答用户问题。\n\n重要规则：\n1. 只能使用知识库中提供的答案内容\n2. 不要添加知识库中没有的信息\n3. 不要自由发挥或编造内容\n4. 如果知识库中没有相关信息，请直接返回知识库中的第一个答案\n\n知识库：\n${kbContext}`;
+      systemPrompt = `你是客服助手。请严格根据以下知识库内容回答用户问题。${contextHistory}\n\n${baseRules}\n\n知识库：\n${kbContext}`;
     }
 
     try {
