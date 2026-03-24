@@ -2356,6 +2356,30 @@ async function handleTelegramWebhook(request, env) {
       }
     } else {
       console.log('No match found or similarity too low, recording unanswered');
+      
+      // v5: 检查是否有强烈情绪，如果有则给出情绪回应
+      const emotion = analyzeEmotion(cleanText);
+      if (emotion !== 'neutral') {
+        console.log('Emotion detected without match:', emotion);
+        let emotionResponse = '';
+        switch (emotion) {
+          case 'angry':
+            emotionResponse = '非常抱歉让您感到不满 🙏\n\n请问有什么我可以帮您的吗？或者您可以详细描述一下遇到的问题，我会尽力协助解决。';
+            break;
+          case 'confused':
+            emotionResponse = '看起来您遇到了一些困惑 🤔\n\n请告诉我具体是什么问题，我会尽力帮您解答！';
+            break;
+          case 'happy':
+            emotionResponse = '很高兴看到您开心 😊\n\n有什么我可以帮您的吗？';
+            break;
+        }
+        
+        if (emotionResponse) {
+          const responseText = addPersonalizedGreetingWithEmotion(emotionResponse, userName, emotion);
+          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
+        }
+      }
+      
       // 记录未回答问题
       try {
         await env.DB.prepare(
