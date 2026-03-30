@@ -1,5 +1,5 @@
-// Telegram 智能知识库机器人
-// v5.0.0 - P5: +热度分析 +配额控制
+﻿// Telegram 智能知识库机器人
+// v4.13.0 - 添加AI回复记录和纠正功能
 // 移除全局变量缓存，适配 Cloudflare Workers 执行模型
 
 export default {
@@ -600,10 +600,29 @@ const adminHtml = `<!DOCTYPE html>
     </div>
 
     <script>
+        // 带认证的 fetch 封装
+        async function authFetch(url, options = {}) {
+            const token = localStorage.getItem('authToken');
+            options.headers = options.headers || {};
+            if (token) {
+                options.headers['Authorization'] = 'Bearer ' + token;
+            }
+            const res = await fetch(url, options);
+            if (res.status === 401) {
+                alert('登录已过期，请重新登录');
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('username');
+                window.location.href = '/login';
+                throw new Error('Unauthorized');
+            }
+            return res;
+        }
+
         // 加载统计数据
         async function loadStats() {
             try {
-                const res = await fetch('/manage/stats');
+                const res = await authFetch('/manage/stats');
                 const data = await res.json();
                 document.getElementById('kbCount').textContent = data.kbCount;
                 document.getElementById('todayAnswers').textContent = data.todayAnswers;
@@ -617,7 +636,7 @@ const adminHtml = `<!DOCTYPE html>
         // 加载配置
         async function loadConfig() {
             try {
-                const res = await fetch('/manage/config');
+                const res = await authFetch('/manage/config');
                 const config = await res.json();
                 document.getElementById('botEnabled').checked = config.botEnabled;
                 document.getElementById('onlyMentioned').checked = config.onlyMentioned;
@@ -644,7 +663,7 @@ const adminHtml = `<!DOCTYPE html>
             };
             
             try {
-                const res = await fetch('/manage/config', {
+                const res = await authFetch('/manage/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
@@ -662,7 +681,7 @@ const adminHtml = `<!DOCTYPE html>
         // 知识库管理
         async function loadKnowledgeBase() {
             try {
-                const res = await fetch('/manage/knowledge');
+                const res = await authFetch('/manage/knowledge');
                 const data = await res.json();
                 const list = document.getElementById('kbList');
                 const search = document.getElementById('searchKb').value.toLowerCase();
@@ -725,7 +744,7 @@ const adminHtml = `<!DOCTYPE html>
             try {
                 const url = editId ? '/manage/knowledge/' + editId : '/manage/knowledge';
                 const method = editId ? 'PUT' : 'POST';
-                const res = await fetch(url, {
+                const res = await authFetch(url, {
                     method: method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -761,7 +780,7 @@ const adminHtml = `<!DOCTYPE html>
 
         async function editKnowledge(id) {
             try {
-                const res = await fetch('/manage/knowledge/' + id);
+                const res = await authFetch('/manage/knowledge/' + id);
                 const data = await res.json();
                 document.getElementById('modalTitle').textContent = '编辑知识';
                 document.getElementById('editAnswerId').value = id;
@@ -781,7 +800,7 @@ const adminHtml = `<!DOCTYPE html>
         async function deleteKnowledge(id) {
             if (!confirm('确定要删除这条知识吗？')) return;
             try {
-                const res = await fetch('/manage/knowledge/' + id, { method: 'DELETE' });
+                const res = await authFetch('/manage/knowledge/' + id, { method: 'DELETE' });
                 if (res.ok) {
                     loadKnowledgeBase();
                     loadStats();
@@ -796,7 +815,7 @@ const adminHtml = `<!DOCTYPE html>
         // 导出知识库
         async function exportKnowledge() {
             try {
-                const res = await fetch('/manage/export');
+                const res = await authFetch('/manage/export');
                 if (!res.ok) throw new Error('导出失败');
                 
                 const data = await res.json();
@@ -851,7 +870,7 @@ const adminHtml = `<!DOCTYPE html>
                     const answers = parts[1].split('||').map(a => a.trim()).filter(a => a);
                     if (questions.length > 0 && answers.length > 0) {
                         try {
-                            const res = await fetch('/manage/knowledge', {
+                            const res = await authFetch('/manage/knowledge', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ answers, questions })
@@ -874,7 +893,7 @@ const adminHtml = `<!DOCTYPE html>
         // 未回答问题
         async function loadUnanswered() {
             try {
-                const res = await fetch('/manage/unanswered');
+                const res = await authFetch('/manage/unanswered');
                 const items = await res.json();
                 const list = document.getElementById('unansweredList');
                 
@@ -912,7 +931,7 @@ const adminHtml = `<!DOCTYPE html>
             list.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-xl"></i><p>正在检查重复...</p></div>';
             
             try {
-                const res = await fetch('/manage/knowledge');
+                const res = await authFetch('/manage/knowledge');
                 const data = await res.json();
                 
                 // 查找重复的问题
@@ -1062,7 +1081,7 @@ const adminHtml = `<!DOCTYPE html>
                 const question = dup ? (dup.question || dup.current.questions[0]) : 'ID: ' + id;
                 
                 try {
-                    const res = await fetch('/manage/knowledge/' + id, { method: 'DELETE' });
+                    const res = await authFetch('/manage/knowledge/' + id, { method: 'DELETE' });
                     const div = document.createElement('div');
                     if (res.ok) {
                         successCount++;
@@ -1103,7 +1122,7 @@ const adminHtml = `<!DOCTYPE html>
             if (!confirm('确定要删除这个重复的知识条目吗？')) return;
             
             try {
-                const res = await fetch('/manage/knowledge/' + id, { method: 'DELETE' });
+                const res = await authFetch('/manage/knowledge/' + id, { method: 'DELETE' });
                 if (res.ok) {
                     alert('删除成功');
                     checkDuplicates(); // 重新查重
@@ -1118,7 +1137,7 @@ const adminHtml = `<!DOCTYPE html>
         // AI回复记录
         async function loadAIResponses() {
             try {
-                const res = await fetch('/manage/ai-responses');
+                const res = await authFetch('/manage/ai-responses');
                 const items = await res.json();
                 const list = document.getElementById('aiResponsesList');
                 
@@ -1171,7 +1190,7 @@ const adminHtml = `<!DOCTYPE html>
         // 显示纠正模态框
         async function showCorrectModal(id) {
             try {
-                const res = await fetch('/manage/ai-responses/' + id);
+                const res = await authFetch('/manage/ai-responses/' + id);
                 const item = await res.json();
                 
                 if (item.error) {
@@ -1210,7 +1229,7 @@ const adminHtml = `<!DOCTYPE html>
             }
             
             try {
-                const res = await fetch('/manage/ai-responses/correct', {
+                const res = await authFetch('/manage/ai-responses/correct', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1244,7 +1263,7 @@ const adminHtml = `<!DOCTYPE html>
             }
             
             try {
-                const res = await fetch('/manage/ai-responses/ignore', {
+                const res = await authFetch('/manage/ai-responses/ignore', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: id })
@@ -1269,7 +1288,7 @@ const adminHtml = `<!DOCTYPE html>
             container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-xl"></i><p>分析中...</p></div>';
             
             try {
-                const res = await fetch('/manage/gaps');
+                const res = await authFetch('/manage/gaps');
                 const data = await res.json();
                 
                 if (data.gaps.length === 0) {
@@ -1308,7 +1327,7 @@ const adminHtml = `<!DOCTYPE html>
             }
             
             try {
-                const res = await fetch('/manage/gaps/adopt', {
+                const res = await authFetch('/manage/gaps/adopt', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: message })
@@ -1328,7 +1347,7 @@ const adminHtml = `<!DOCTYPE html>
         // 前言内容管理
         async function loadContext() {
             try {
-                const res = await fetch('/manage/context');
+                const res = await authFetch('/manage/context');
                 const items = await res.json();
                 const container = document.getElementById('contextList');
                 
@@ -1379,7 +1398,7 @@ const adminHtml = `<!DOCTYPE html>
 
         async function editContext(id) {
             try {
-                const res = await fetch('/manage/context/' + id);
+                const res = await authFetch('/manage/context/' + id);
                 const data = await res.json();
                 document.getElementById('contextModalTitle').textContent = '编辑前言';
                 document.getElementById('contextId').value = id;
@@ -1408,7 +1427,7 @@ const adminHtml = `<!DOCTYPE html>
             try {
                 const url = id ? '/manage/context/' + id : '/manage/context';
                 const method = id ? 'PUT' : 'POST';
-                const res = await fetch(url, {
+                const res = await authFetch(url, {
                     method: method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -1428,7 +1447,7 @@ const adminHtml = `<!DOCTYPE html>
         async function deleteContext(id) {
             if (!confirm('确定要删除这条前言吗？')) return;
             try {
-                const res = await fetch('/manage/context/' + id, { method: 'DELETE' });
+                const res = await authFetch('/manage/context/' + id, { method: 'DELETE' });
                 if (res.ok) {
                     loadContext();
                 } else {
@@ -1447,7 +1466,7 @@ const adminHtml = `<!DOCTYPE html>
         // 加载图表数据
         async function loadCharts() {
             try {
-                const res = await fetch('/manage/charts');
+                const res = await authFetch('/manage/charts');
                 const data = await res.json();
                 
                 renderTrendChart(data.trend);
@@ -1722,7 +1741,7 @@ const adminHtml = `<!DOCTYPE html>
         async function loadOperationLogs() {
             try {
                 const filter = document.getElementById('logFilter').value;
-                const res = await fetch('/manage/logs');
+                const res = await authFetch('/manage/logs');
                 let logs = await res.json();
                 
                 // 过滤
@@ -1860,6 +1879,7 @@ const adminHtml = `<!DOCTYPE html>
 async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
+  const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
   
   if (request.method === 'OPTIONS') {
     return handleCORS();
@@ -1872,44 +1892,68 @@ async function handleRequest(request, env) {
     });
   }
   
-  // 登录 API
+  // 登录 API - 有速率限制
   if (path === '/api/login' && request.method === 'POST') {
+    const rateCheck = await checkAPIRateLimit(env, clientIP, '/api/login');
+    if (!rateCheck.allowed) {
+      return jsonResponse({ error: '请求过于频繁，请稍后再试' }, 429);
+    }
     return await handleLogin(request, env);
   }
   
-  // 管理页面 - 需要验证 token
+  // 管理页面
   if (path === '/manage' && request.method === 'GET') {
     return new Response(adminHtml, {
       headers: { 'Content-Type': 'text/html; charset=utf-8' }
     });
   }
   
+  // Telegram Webhook - 公开
   if (request.method === 'POST' && path === '/webhook') {
     return await handleTelegramWebhook(request, env);
   }
   
+  // ========== 需要认证的管理 API ==========
+  
+  // 验证 token
+  const authPayload = await authenticateRequest(request, env);
+  
+  // 统计数据 - 需要登录
   if (request.method === 'GET' && path === '/manage/stats') {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     return await getStats(env);
   }
 
+  // 图表数据 - 需要登录
   if (request.method === 'GET' && path === '/manage/charts') {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     return await getChartData(env);
   }
 
+  // 操作日志 - 需要管理员
   if (request.method === 'GET' && path === '/manage/logs') {
+    const adminCheck = await requireAdmin(request, env);
+    if (!adminCheck.authorized) return adminCheck.response;
     return await getOperationLogs(env);
   }
 
+  // 配置管理
   if (path === '/manage/config') {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     if (request.method === 'GET') {
       return await getConfigApi(env);
     }
     if (request.method === 'POST') {
+      // 保存配置需要管理员
+      const adminCheck = await requireAdmin(request, env);
+      if (!adminCheck.authorized) return adminCheck.response;
       return await saveConfig(request, env);
     }
   }
   
+  // 知识库管理 - 需要登录
   if (path === '/manage/knowledge') {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     if (request.method === 'GET') {
       return await getAllKnowledge(env);
     }
@@ -1918,12 +1962,15 @@ async function handleRequest(request, env) {
     }
   }
   
+  // 导出知识库 - 需要登录
   if (path === '/manage/export') {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     return await exportKnowledgeData(env);
   }
   
   const knowledgeMatch = path.match(/^\/manage\/knowledge\/(\d+)$/);
   if (knowledgeMatch) {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     const id = parseInt(knowledgeMatch[1]);
     if (request.method === 'GET') {
       return await getKnowledge(id, env);
@@ -1932,40 +1979,53 @@ async function handleRequest(request, env) {
       return await updateKnowledge(id, request, env);
     }
     if (request.method === 'DELETE') {
+      // 删除需要管理员权限
+      const adminCheck = await requireAdmin(request, env);
+      if (!adminCheck.authorized) return adminCheck.response;
       return await deleteKnowledge(id, env, request);
     }
   }
   
+  // 未回答问题 - 需要登录
   if (path === '/manage/unanswered') {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     if (request.method === 'GET') {
       return await getUnanswered(env);
     }
   }
   
+  // 知识缺口分析 - 需要管理员
   if (path === '/manage/gaps') {
+    const adminCheck = await requireAdmin(request, env);
+    if (!adminCheck.authorized) return adminCheck.response;
     if (request.method === 'GET') {
       return await analyzeKnowledgeGaps(env);
     }
   }
   
-  // 采纳知识缺口（标记为已处理）
+  // 采纳知识缺口 - 需要管理员
   if (path === '/manage/gaps/adopt' && request.method === 'POST') {
+    const adminCheck = await requireAdmin(request, env);
+    if (!adminCheck.authorized) return adminCheck.response;
     return await adoptGap(request, env);
   }
   
-  // AI回复记录
+  // AI回复记录 - 需要登录
   if (path === '/manage/ai-responses') {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     if (request.method === 'GET') {
       return await getAIResponses(env);
     }
   }
   
-  // AI回复纠正
+  // AI回复纠正 - 需要管理员
   if (path === '/manage/ai-responses/correct' && request.method === 'POST') {
+    const adminCheck = await requireAdmin(request, env);
+    if (!adminCheck.authorized) return adminCheck.response;
     return await correctAIResponse(request, env);
   }
   
-  // AI回复忽略
+  // AI回复忽略 - 需要管理员
   if (path === '/manage/ai-responses/ignore' && request.method === 'POST') {
     return await ignoreAIResponse(request, env);
   }
@@ -1979,25 +2039,37 @@ async function handleRequest(request, env) {
     }
   }
   
+  // 前言内容管理 - 需要登录
   if (path === '/manage/context') {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     if (request.method === 'GET') {
       return await getAllContext(env);
     }
     if (request.method === 'POST') {
+      // 添加前言需要管理员
+      const adminCheck = await requireAdmin(request, env);
+      if (!adminCheck.authorized) return adminCheck.response;
       return await addContext(request, env);
     }
   }
   
   const contextMatch = path.match(/^\/manage\/context\/(\d+)$/);
   if (contextMatch) {
+    if (!authPayload) return jsonResponse({ error: '未授权访问' }, 401);
     const id = parseInt(contextMatch[1]);
     if (request.method === 'GET') {
       return await getContext(id, env);
     }
     if (request.method === 'PUT') {
+      // 修改前言需要管理员
+      const adminCheck = await requireAdmin(request, env);
+      if (!adminCheck.authorized) return adminCheck.response;
       return await updateContext(id, request, env);
     }
     if (request.method === 'DELETE') {
+      // 删除前言需要管理员
+      const adminCheck = await requireAdmin(request, env);
+      if (!adminCheck.authorized) return adminCheck.response;
       return await deleteContext(id, env);
     }
   }
@@ -2008,8 +2080,10 @@ async function handleRequest(request, env) {
     });
   }
 
-  // 查看最近消息（调试用）
+  // 查看最近消息（调试用） - 需要管理员
   if (path === '/debug/messages') {
+    const adminCheck = await requireAdmin(request, env);
+    if (!adminCheck.authorized) return adminCheck.response;
     return await getRecentMessages(env);
   }
   
@@ -2040,40 +2114,179 @@ function handleCORS() {
   });
 }
 
+// ============================================================
+// JWT 认证
+// ============================================================
+
+const JWT_EXPIRY = 86400000; // 24小时
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_TIME = 300000; // 5分钟
+
+// 生成 JWT Token
+async function generateJWT(payload, secret) {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const now = Date.now();
+  const tokenPayload = { ...payload, iat: now, exp: now + JWT_EXPIRY };
+  const encodedHeader = btoa(JSON.stringify(header));
+  const encodedPayload = btoa(JSON.stringify(tokenPayload));
+  const signature = await signMessage(`${encodedHeader}.${encodedPayload}`, secret);
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
+}
+
+// 验证 JWT Token
+async function verifyJWT(token, secret) {
+  try {
+    if (!token) return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [encodedHeader, encodedPayload, signature] = parts;
+    const expectedSignature = await signMessage(`${encodedHeader}.${encodedPayload}`, secret);
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(atob(encodedPayload));
+    if (payload.exp && Date.now() > payload.exp) return null;
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 签名消息
+async function signMessage(message, secret) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  return btoa(String.fromCharCode(...new Uint8Array(signature)));
+}
+
+// 从请求中获取并验证 Token
+async function authenticateRequest(request, env) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.substring(7);
+  const jwtSecret = env.JWT_SECRET || 'default-jwt-secret-change-in-production';
+  return await verifyJWT(token, jwtSecret);
+}
+
+// 检查是否为管理员
+async function requireAdmin(request, env) {
+  const payload = await authenticateRequest(request, env);
+  if (!payload) {
+    return { authorized: false, response: jsonResponse({ error: '未授权访问' }, 401) };
+  }
+  if (payload.role !== 'admin') {
+    return { authorized: false, response: jsonResponse({ error: '需要管理员权限' }, 403) };
+  }
+  return { authorized: true, payload };
+}
+
+// 检查登录速率限制
+async function checkLoginRateLimit(env, ip) {
+  try {
+    const now = Date.now();
+    const result = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM login_attempts WHERE ip_address = ? AND created_at > ?'
+    ).bind(ip, now - LOGIN_LOCKOUT_TIME).first();
+    const count = result?.count || 0;
+    if (count >= MAX_LOGIN_ATTEMPTS) {
+      return { allowed: false, remainingAttempts: 0, lockoutRemaining: LOGIN_LOCKOUT_TIME };
+    }
+    return { allowed: true, remainingAttempts: MAX_LOGIN_ATTEMPTS - count, lockoutRemaining: 0 };
+  } catch (e) {
+    return { allowed: true, remainingAttempts: MAX_LOGIN_ATTEMPTS, lockoutRemaining: 0 };
+  }
+}
+
+// 记录登录失败
+async function recordLoginAttempt(env, ip) {
+  try {
+    await env.DB.prepare(
+      'INSERT INTO login_attempts (ip_address, created_at) VALUES (?, ?)'
+    ).bind(ip, Date.now()).run();
+  } catch (e) {
+    console.error('Failed to record login attempt:', e);
+  }
+}
+
+// 清除登录尝试记录
+async function clearLoginAttempts(env, ip) {
+  try {
+    await env.DB.prepare(
+      'DELETE FROM login_attempts WHERE ip_address = ?'
+    ).bind(ip).run();
+  } catch (e) {
+    console.error('Failed to clear login attempts:', e);
+  }
+}
+
 // 登录处理
 async function handleLogin(request, env) {
   try {
+    const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+    
+    // 检查登录速率限制
+    const rateCheck = await checkLoginRateLimit(env, clientIP);
+    if (!rateCheck.allowed) {
+      return jsonResponse({
+        success: false,
+        error: '登录尝试过多，请 ' + Math.ceil(rateCheck.lockoutRemaining / 60000) + ' 分钟后再试'
+      }, 429);
+    }
+    
     const body = await request.json();
     const { username, password } = body;
+    
+    if (!username || !password) {
+      return jsonResponse({ success: false, error: '用户名和密码不能为空' }, 400);
+    }
     
     // 从环境变量获取密码
     const adminPassword = env.ADMIN_TOKEN || 'admin';
     const userPassword = env.USER_TOKEN || 'user';
+    const jwtSecret = env.JWT_SECRET || 'default-jwt-secret-change-in-production';
+    
+    let role = null;
+    let name = null;
     
     // 验证用户
     if (username === 'admin' && password === adminPassword) {
-      const token = 'admin_' + Date.now() + '_' + Math.random().toString(36).substring(2);
-      return jsonResponse({
-        success: true,
-        token: token,
-        role: 'admin',
-        username: 'admin'
-      });
+      role = 'admin';
+      name = 'admin';
     } else if (username === 'user' && password === userPassword) {
-      const token = 'user_' + Date.now() + '_' + Math.random().toString(36).substring(2);
-      return jsonResponse({
-        success: true,
-        token: token,
-        role: 'user',
-        username: 'user'
-      });
-    } else {
+      role = 'user';
+      name = 'user';
+    }
+    
+    if (!role) {
+      // 记录失败的登录尝试
+      await recordLoginAttempt(env, clientIP);
       return jsonResponse({
         success: false,
         error: '用户名或密码错误'
       }, 401);
     }
+    
+    // 清除登录尝试记录
+    await clearLoginAttempts(env, clientIP);
+    
+    // 生成真正的 JWT Token
+    const token = await generateJWT({ role, username: name }, jwtSecret);
+    
+    return jsonResponse({
+      success: true,
+      token: token,
+      role: role,
+      username: name
+    });
   } catch (error) {
+    console.error('Login error:', error);
     return jsonResponse({
       success: false,
       error: '登录请求处理失败'
@@ -2091,12 +2304,67 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-// 获取配置 - 每次都从数据库读取
+// 配置缓存（5分钟）
+let configCache = null;
+let configCacheTime = 0;
+const CONFIG_CACHE_TTL = 5 * 60 * 1000; // 5分钟
+
+// API 速率限制
+const API_RATE_LIMITS = {
+  '/api/login': { max: 5, window: 300000 },      // 登录: 5次/5分钟
+  '/manage/knowledge': { max: 60, window: 60000 }, // 知识库: 60次/分钟
+  '/manage/stats': { max: 120, window: 60000 },   // 统计: 120次/分钟
+  'default': { max: 100, window: 60000 }          // 默认: 100次/分钟
+};
+
+// 检查 API 速率限制
+async function checkAPIRateLimit(env, ip, path) {
+  const limit = API_RATE_LIMITS[path] || API_RATE_LIMITS['default'];
+  const now = Date.now();
+  const windowStart = now - limit.window;
+  
+  try {
+    // 清理过期记录
+    await env.DB.prepare(
+      'DELETE FROM rate_limits WHERE created_at < ?'
+    ).bind(windowStart).run();
+    
+    // 检查当前计数
+    const result = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM rate_limits WHERE identifier = ? AND action = ? AND created_at > ?'
+    ).bind(ip, path, windowStart).first();
+    
+    const count = result?.count || 0;
+    
+    if (count >= limit.max) {
+      return { allowed: false, remaining: 0, resetIn: limit.window };
+    }
+    
+    // 记录本次请求
+    await env.DB.prepare(
+      'INSERT INTO rate_limits (identifier, action, created_at) VALUES (?, ?, ?)'
+    ).bind(ip, path, now).run();
+    
+    return { allowed: true, remaining: limit.max - count - 1, resetIn: limit.window };
+  } catch (e) {
+    console.error('Rate limit check error:', e);
+    return { allowed: true, remaining: limit.max, resetIn: limit.window };
+  }
+}
+
+// 获取配置 - 使用缓存
 async function getConfig(env) {
+  const now = Date.now();
+  
+  // 检查缓存
+  if (configCache && (now - configCacheTime) < CONFIG_CACHE_TTL) {
+    return configCache;
+  }
+  
   try {
     const config = await env.DB.prepare('SELECT * FROM bot_config WHERE id = 1').first();
     if (config) {
-      return {
+      configCache = {
         botEnabled: config.bot_enabled === 1,
         onlyMentioned: config.only_mentioned === 1,
         useAIClassifier: config.use_ai_classifier === 1,
@@ -2106,7 +2374,7 @@ async function getConfig(env) {
         aiDailyLimit: config.ai_daily_limit || 100
       };
     } else {
-      return {
+      configCache = {
         botEnabled: true,
         onlyMentioned: false,
         useAIClassifier: true,
@@ -2116,6 +2384,8 @@ async function getConfig(env) {
         aiDailyLimit: 100
       };
     }
+    configCacheTime = now;
+    return configCache;
   } catch (error) {
     console.error('getConfig error:', error);
     return {
@@ -2178,6 +2448,9 @@ async function saveConfig(request, env) {
       maxContextItems || 5,
       aiDailyLimit || 100
     ).run();
+    
+    // 清除配置缓存
+    configCache = null;
     
     // 记录操作日志
     const configChanges = [];
@@ -2284,37 +2557,6 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
 
-    // v5 P0-8: 检查是否是澄清选择（数字回复）
-    const clarificationContext = await env.DB.prepare(
-      'SELECT message FROM conversation_context WHERE chat_id = ? AND user_id = ? AND intent = ? ORDER BY created_at DESC LIMIT 1'
-    ).bind(chatId, userId, 'clarification').first();
-    
-    if (clarificationContext) {
-      try {
-        const contextData = JSON.parse(clarificationContext.message);
-        if (contextData.type === 'clarification') {
-          const choice = handleClarifyChoice(cleanText, contextData.matches);
-          if (choice.selected) {
-            console.log('User selected clarification option:', choice.match.question);
-            let responseText = addPersonalizedGreetingWithEmotion(choice.match.answer, userName, analyzeEmotion(cleanText));
-            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
-            
-            // 记录回答
-            await recordAnswer(env, chatId, userId, userName, cleanText, choice.match.answer, 'kb', choice.match.similarity);
-            
-            // 清除澄清状态
-            await env.DB.prepare(
-              'DELETE FROM conversation_context WHERE chat_id = ? AND user_id = ? AND intent = ?'
-            ).bind(chatId, userId, 'clarification').run();
-            
-            return new Response('OK', { status: 200 });
-          }
-        }
-      } catch (e) {
-        console.error('Clarification handling error:', e);
-      }
-    }
-
     // 步骤2：检查是否被忽略的问题
     const ignoredRecord = await env.DB.prepare(
       'SELECT id FROM ai_responses WHERE question = ? AND is_ignored = 1 LIMIT 1'
@@ -2325,23 +2567,26 @@ async function handleTelegramWebhook(request, env) {
       return new Response('OK', { status: 200 });
     }
     
-    // 步骤3：检查回答缓存
-    const cachedAnswer = await getCachedAnswer(env, cleanText);
+    // 步骤2.5：检查回答缓存（命中则直接返回，跳过知识库搜索）
+    const questionHash = cleanText.toLowerCase().trim();
+    const cachedAnswer = await env.DB.prepare(
+      `SELECT answer, answer_type FROM answer_cache 
+       WHERE question_hash = ? AND expires_at > CURRENT_TIMESTAMP LIMIT 1`
+    ).bind(questionHash).first();
+    
     if (cachedAnswer) {
       console.log('Cache hit for question:', cleanText);
-      let responseText = addPersonalizedGreetingWithEmotion(cachedAnswer.answer, userName, analyzeEmotion(cleanText));
+      const responseText = addPersonalizedGreeting(cachedAnswer.answer, userName);
       await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
-      
-      // 记录回答
-      try {
-        await recordAnswer(env, chatId, userId, userName, cleanText, cachedAnswer.answer, cachedAnswer.answer_type, cachedAnswer.similarity);
-      } catch (err) {
-        console.error('Record answer error:', err);
-      }
+      // 更新缓存命中次数（异步）
+      env.DB.prepare(
+        'UPDATE answer_cache SET hit_count = hit_count + 1, last_hit = CURRENT_TIMESTAMP WHERE question_hash = ?'
+      ).bind(questionHash).run().catch(() => {});
+      await recordAnswer(env, chatId, userId, userName, cleanText, cachedAnswer.answer, 'cache', 1.0);
       return new Response('OK', { status: 200 });
     }
     
-    // 步骤4：在知识库中搜索最匹配的问题
+    // 步骤3：在知识库中搜索最匹配的问题
     console.log('Searching knowledge base for:', cleanText);
     const matches = await findBestMatches(env, cleanText, config.maxContextItems || 5);
     console.log('Matches found:', matches.length, 'Best similarity:', matches[0]?.similarity);
@@ -2350,31 +2595,13 @@ async function handleTelegramWebhook(request, env) {
     
     if (matches.length > 0 && matches[0].similarity >= threshold) {
       console.log('Match found, preparing to send response');
-      console.log('Sending response with similarity:', matches[0].similarity);
-      
-      // v5 P0-8: 检测是否需要多轮澄清
-      const clarification = detectAmbiguousMatches(matches);
-      if (clarification.ambiguous) {
-        console.log('Ambiguous matches detected, asking for clarification');
-        await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, clarification.msg, message.message_id);
-        
-        // 保存澄清状态到上下文（简化实现：直接保存到数据库）
-        await env.DB.prepare(
-          'INSERT INTO conversation_context (chat_id, user_id, role, message, intent) VALUES (?, ?, ?, ?, ?)'
-        ).bind(chatId, userId, 'system', JSON.stringify({ type: 'clarification', matches: matches.slice(0, 3) }), 'clarification').run();
-        
-        return new Response('OK', { status: 200 });
-      }
-      
       let responseText;
       let answerType;
       let aiResponseId = null;
       
       if (config.useAIAnswer !== false && matches[0].similarity < 0.7 && cleanText.length >= 3) {
         // 使用AI生成答案（仅当消息长度>=3个字时）
-        // v5 P0-3: 获取对话上下文
-        const conversationContext = await getConversationContext(env, chatId, userId, 3);
-        responseText = await generateAIAnswer(env, cleanText, matches, config, conversationContext);
+        responseText = await generateAIAnswer(env, cleanText, matches, config);
         answerType = 'ai';
         
         // 记录AI回复
@@ -2393,73 +2620,35 @@ async function handleTelegramWebhook(request, env) {
         answerType = 'kb';
       }
       
-      // v5: 整合称呼和情感分析
-      const emotion = analyzeEmotion(cleanText);
-      responseText = addPersonalizedGreetingWithEmotion(responseText, userName, emotion);
+      // 添加个性化称呼
+      const responseWithGreeting = addPersonalizedGreeting(responseText, userName);
       
       // 发送消息
-      console.log('Preparing to send message to Telegram');
-      console.log('Chat ID:', chatId);
-      console.log('Response text length:', responseText.length);
-      console.log('Bot token exists:', !!env.TELEGRAM_BOT_TOKEN);
-      const sendResult = await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
+      const sendResult = await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseWithGreeting, message.message_id);
       console.log('Send result:', sendResult);
       
-      // v5 P0-3: 保存对话上下文
-      await saveConversationContext(env, chatId, userId, 'user', cleanText, 'question');
-      await saveConversationContext(env, chatId, userId, 'assistant', responseText, answerType);
-      
-      // 同步记录（确保数据写入）
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        await env.DB.prepare(
-          'INSERT INTO bot_stats (date, answers_today, total_answers) VALUES (?, 1, 1) ON CONFLICT(date) DO UPDATE SET answers_today = answers_today + 1, total_answers = total_answers + 1'
-        ).bind(today).run();
-        console.log('Stats updated successfully');
-        
-        await recordAnswer(env, chatId, userId, userName, cleanText, responseText, answerType, matches[0].similarity);
-        console.log('Answer recorded successfully');
-        
-        // v5 P0-4: 保存到缓存
-        await saveCachedAnswer(env, cleanText, matches[0].answer, answerType, matches[0].similarity);
-      } catch (err) {
-        console.error('Record error:', err);
+      // 高相似度答案写入缓存（异步，不阻塞响应）
+      if (matches[0].similarity >= 0.75 && answerType === 'kb') {
+        env.DB.prepare(
+          `INSERT OR REPLACE INTO answer_cache 
+           (question_hash, question, answer, answer_type, similarity, hit_count, created_at, expires_at, last_hit)
+           VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, datetime('now', '+7 days'), CURRENT_TIMESTAMP)`
+        ).bind(questionHash, cleanText, responseText, answerType, matches[0].similarity).run().catch(() => {});
       }
+      
+      // 异步记录统计（不阻塞响应）
+      const today = new Date().toISOString().split('T')[0];
+      env.DB.prepare(
+        'INSERT INTO bot_stats (date, answers_today, total_answers) VALUES (?, 1, 1) ON CONFLICT(date) DO UPDATE SET answers_today = answers_today + 1, total_answers = total_answers + 1'
+      ).bind(today).run().catch(() => {});
+      
+      recordAnswer(env, chatId, userId, userName, cleanText, responseText, answerType, matches[0].similarity).catch(() => {});
+      
     } else {
       console.log('No match found or similarity too low, recording unanswered');
-      
-      // v5: 检查是否有强烈情绪，如果有则给出情绪回应
-      const emotion = analyzeEmotion(cleanText);
-      if (emotion !== 'neutral') {
-        console.log('Emotion detected without match:', emotion);
-        let emotionResponse = '';
-        switch (emotion) {
-          case 'angry':
-            emotionResponse = '非常抱歉让您感到不满 🙏\n\n请问有什么我可以帮您的吗？或者您可以详细描述一下遇到的问题，我会尽力协助解决。';
-            break;
-          case 'confused':
-            emotionResponse = '看起来您遇到了一些困惑 🤔\n\n请告诉我具体是什么问题，我会尽力帮您解答！';
-            break;
-          case 'happy':
-            emotionResponse = '很高兴看到您开心 😊\n\n有什么我可以帮您的吗？';
-            break;
-        }
-        
-        if (emotionResponse) {
-          const responseText = addPersonalizedGreetingWithEmotion(emotionResponse, userName, emotion);
-          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText, message.message_id);
-        }
-      }
-      
-      // 记录未回答问题
-      try {
-        await env.DB.prepare(
-          'INSERT INTO unanswered (chat_id, user_id, user_name, message, chat_type, ai_classified) VALUES (?, ?, ?, ?, ?, 1)'
-        ).bind(chatId, userId, userName, cleanText, chatType).run();
-        console.log('Unanswered question recorded successfully (no match)');
-      } catch (err) {
-        console.error('Failed to record unanswered question (no match):', err);
-      }
+      env.DB.prepare(
+        'INSERT INTO unanswered (chat_id, user_id, user_name, message, chat_type, ai_classified) VALUES (?, ?, ?, ?, ?, 1)'
+      ).bind(chatId, userId, userName, cleanText, chatType).run().catch(() => {});
     }
     
     return new Response('OK', { status: 200 });
@@ -2469,121 +2658,139 @@ async function handleTelegramWebhook(request, env) {
   }
 }
 
-// v5 P0-1: AI意图分类 - 三层过滤（关键词 → AI语义 → 规则兜底）
+// AI意图分类 - 使用缓存关键词
 async function classifyIntent(env, message, config) {
-  const m = message.toLowerCase().trim();
-  
   try {
-    // Layer 1: 关键词快速匹配
-    const result = await env.DB.prepare(
-      "SELECT DISTINCT keywords FROM knowledge_questions WHERE enabled = 1 AND keywords IS NOT NULL AND keywords != ''"
-    ).all();
+    const messageLower = message.toLowerCase();
     
-    const allKeywords = [];
-    (result.results || []).forEach(row => {
-      if (row.keywords) {
-        allKeywords.push(...row.keywords.split(',').map(k => k.trim()).filter(k => k.length >= 2));
-      }
-    });
+    // 使用缓存的关键词（避免每次都查数据库）
+    const uniqueKeywords = await getCachedKeywords(env);
     
-    const uniqueKeywords = [...new Set(allKeywords)];
-    const hasKeyword = uniqueKeywords.some(kw => {
-      const k = kw.toLowerCase();
-      return m === k || m.includes(k + ' ') || m.includes(' ' + k) || m.startsWith(k);
-    });
+    // 检查消息是否包含任何关键词
+    const hasQuickMatch = uniqueKeywords.some(w => w.length >= 2 && messageLower.includes(w.toLowerCase()));
     
-    if (hasKeyword) {
-      return { shouldAnswer: true, intent: 'keyword', confidence: 0.9, layer: 1 };
-    }
-  } catch (e) {}
-  
-  // Layer 2: AI语义判断（仅对长度>=4的消息启用）
-  if (config.useAIClassifier !== false && env.AI && message.length >= 4) {
-    if (!await checkAIQuota(env)) {
-      return { shouldAnswer: true, intent: 'quota_exceeded', confidence: 0.6, layer: 0 };
+    if (hasQuickMatch) {
+      return { shouldAnswer: true, intent: 'quick_match', confidence: 0.8 };
     }
     
-    try {
-      const aiResponse = await env.AI.run('@cf/meta/llama-3.2-1b-instruct', {
-        messages: [
-          { 
-            role: 'system', 
-            content: '判断是否需要客服回答。需要回答:询问/求助/投诉/确认。不需要回答:问候/感叹/感谢/陈述句/过短。JSON:{"answer":true/false}' 
-          },
-          { role: 'user', content: message }
-        ],
-        temperature: 0.1,
-        max_tokens: 50
-      });
-      
-      const result = JSON.parse(aiResponse.response?.trim() || '{"answer":true}');
-      if (result.answer === false && message.length < 10) {
-        return { shouldAnswer: false, intent: 'ai_filtered', confidence: 0.85, layer: 2 };
-      }
-      return { shouldAnswer: true, intent: 'ai_classified', confidence: 0.8, layer: 2 };
-    } catch (e) {}
-  }
-  
-  // Layer 3: 规则兜底
-  const indicators = ['怎么', '如何', '为什么', '在哪', '多少', '能不能', '可以', '是否', '帮', '出问题', '不行', '报错', '怎么办', '是什么', '请问'];
-  const hasIndicator = indicators.some(i => m.includes(i));
-  
-  return { 
-    shouldAnswer: hasIndicator, 
-    intent: hasIndicator ? 'rule' : 'no_match', 
-    confidence: hasIndicator ? 0.6 : 0.4, 
-    layer: 3 
-  };
-}
-
-// 检查AI配额
-async function checkAIQuota(env) {
-  try {
-    const result = await env.DB.prepare(
-      "SELECT COALESCE(SUM(neurons), 0) as total FROM ai_calls WHERE DATE(created_at) = DATE('now')"
-    ).first();
-    return (result?.total || 0) < 9000; // MAX_NEURONS
-  } catch (e) {
-    return true;
+    // 没有关键词匹配，仍让相似度匹配决定
+    return { shouldAnswer: true, intent: 'no_keyword_match', confidence: 0.5 };
+  } catch (error) {
+    console.error('AI classification error:', error);
+    return { shouldAnswer: true, intent: 'error_fallback', confidence: 0.5 };
   }
 }
 
-// 在知识库中查找最佳匹配
+// 关键词缓存 (5分钟)
+let keywordsCache = null;
+let keywordsCacheTime = 0;
+const KEYWORDS_CACHE_TTL = 5 * 60 * 1000; // 5分钟
+
+// 获取缓存的关键词列表
+async function getCachedKeywords(env) {
+  const now = Date.now();
+  if (keywordsCache && (now - keywordsCacheTime) < KEYWORDS_CACHE_TTL) {
+    return keywordsCache;
+  }
+  
+  const result = await env.DB.prepare(
+    "SELECT DISTINCT keywords FROM knowledge_questions WHERE enabled = 1 AND keywords IS NOT NULL AND keywords != ''"
+  ).all();
+  
+  const allKeywords = [];
+  (result.results || []).forEach(row => {
+    if (row.keywords) {
+      const keywords = row.keywords.split(',').map(k => k.trim()).filter(k => k);
+      allKeywords.push(...keywords);
+    }
+  });
+  
+  keywordsCache = [...new Set(allKeywords)];
+  keywordsCacheTime = now;
+  return keywordsCache;
+}
+
+// 在知识库中查找最佳匹配 - 优化版本
 async function findBestMatches(env, query, maxResults = 5) {
   try {
-    const queryLower = query.toLowerCase();
+    const queryLower = query.toLowerCase().trim();
     console.log('findBestMatches called with query:', query);
     
-    // 直接从数据库查询
-    const result = await env.DB.prepare(
-      'SELECT kq.id, kq.question, kq.answer_id, kq.keywords, qa.answer FROM knowledge_questions kq JOIN knowledge_answers qa ON kq.answer_id = qa.id WHERE kq.enabled = 1 AND qa.enabled = 1'
-    ).all();
+    // 先检查完全匹配（使用索引查询）
+    const exactResult = await env.DB.prepare(
+      `SELECT kq.id, kq.question, kq.answer_id, kq.keywords, qa.answer 
+       FROM knowledge_questions kq 
+       JOIN knowledge_answers qa ON kq.answer_id = qa.id 
+       WHERE kq.enabled = 1 AND qa.enabled = 1 
+       AND LOWER(kq.question) = ?
+       LIMIT 10`
+    ).bind(queryLower).all();
     
-    const allQuestions = result.results || [];
-    console.log('Total questions in DB:', allQuestions.length);
+    const exactMatches = exactResult.results || [];
+    if (exactMatches.length > 0) {
+      console.log('Found', exactMatches.length, 'exact matches');
+      // 随机选择一个完全匹配
+      const randomIndex = Math.floor(Math.random() * exactMatches.length);
+      return [{ ...exactMatches[randomIndex], similarity: 1.0 }];
+    }
     
-    if (allQuestions.length === 0) {
-      console.log('No questions found in database');
+    // 使用关键词快速过滤
+    const queryWords = queryLower.split(/\s+/).filter(w => w.length >= 2);
+    let filteredQuestions = [];
+    
+    if (queryWords.length > 0) {
+      // 构建 OR 条件查询包含关键词的问题
+      const keywordConditions = queryWords.map(() => 
+        "(LOWER(kq.question) LIKE ? OR LOWER(kq.keywords) LIKE ?)"
+      ).join(' OR ');
+      
+      const params = [];
+      queryWords.forEach(word => {
+        params.push(`%${word}%`, `%${word}%`);
+      });
+      
+      const filteredResult = await env.DB.prepare(
+        `SELECT kq.id, kq.question, kq.answer_id, kq.keywords, qa.answer 
+         FROM knowledge_questions kq 
+         JOIN knowledge_answers qa ON kq.answer_id = qa.id 
+         WHERE kq.enabled = 1 AND qa.enabled = 1 
+         AND (${keywordConditions})
+         LIMIT 50`
+      ).bind(...params).all();
+      
+      filteredQuestions = filteredResult.results || [];
+    }
+    
+    // 如果关键词过滤结果太少，补充一些热门问题
+    if (filteredQuestions.length < 10) {
+      const hotResult = await env.DB.prepare(
+        `SELECT kq.id, kq.question, kq.answer_id, kq.keywords, qa.answer 
+         FROM knowledge_questions kq 
+         JOIN knowledge_answers qa ON kq.answer_id = qa.id 
+         WHERE kq.enabled = 1 AND qa.enabled = 1 
+         ORDER BY qa.use_count DESC 
+         LIMIT 20`
+      ).all();
+      
+      const hotQuestions = hotResult.results || [];
+      // 合并去重
+      const existingIds = new Set(filteredQuestions.map(q => q.id));
+      hotQuestions.forEach(q => {
+        if (!existingIds.has(q.id)) {
+          filteredQuestions.push(q);
+        }
+      });
+    }
+    
+    console.log('Filtered questions:', filteredQuestions.length);
+    
+    if (filteredQuestions.length === 0) {
+      console.log('No questions found after filtering');
       return [];
     }
     
-    // 快速路径：直接匹配（收集所有完全匹配的答案）
-    const exactMatches = [];
-    for (const item of allQuestions) {
-      if (item.question.toLowerCase() === queryLower) {
-        exactMatches.push({ ...item, similarity: 1.0 });
-      }
-    }
-    
-    // 如果有完全匹配，随机选择一个
-    if (exactMatches.length > 0) {
-      console.log('Found', exactMatches.length, 'exact matches, selecting randomly');
-      const randomIndex = Math.floor(Math.random() * exactMatches.length);
-      return [exactMatches[randomIndex]];
-    }
-    
-    // 计算相似度
-    const scored = allQuestions.map(item => {
+    // 计算相似度（只在过滤后的结果上计算）
+    const scored = filteredQuestions.map(item => {
       const similarity = calculateSimilarity(query, item.question, item.keywords);
       return { ...item, similarity };
     });
@@ -2591,12 +2798,11 @@ async function findBestMatches(env, query, maxResults = 5) {
     // 按相似度降序排序
     scored.sort((a, b) => b.similarity - a.similarity);
     
-    // 获取最高相似度
+    // 只返回前 maxResults 个
     const bestSimilarity = scored[0]?.similarity || 0;
-    console.log('Best similarity found:', bestSimilarity);
+    console.log('Best similarity found:', bestSimilarity, 'Returning top', Math.min(maxResults, scored.length));
     
-    // 返回排序后的所有结果，让主流程决定阈值
-    return scored;
+    return scored.slice(0, maxResults);
   } catch (error) {
     console.error('Find matches error:', error);
     return [];
@@ -2649,21 +2855,6 @@ async function isSpamMessage(env, message, chatId) {
 
 // 检查是否为日常对话（不需要记录和回答）
 function isCasualChat(message) {
-  const messageLower = message.toLowerCase().trim();
-  
-  // v5: 如果消息包含强烈情绪词，不视为日常对话，需要处理
-  const emotionWords = [
-    // 愤怒
-    '气死', '烦死', '恶心', '投诉', '退款', '差评', '怒了', '火大', '垃圾', '骗子', '坑人',
-    // 困惑
-    '不懂', '不明白', '怎么回事', '搞不懂', '晕', '迷糊', '懵', '什么鬼', '不会用', '求助',
-    // 开心/感谢（但可能包含问题）
-    '谢谢', '感谢', '太棒了', '完美', '优秀', '好用'
-  ];
-  if (emotionWords.some(w => messageLower.includes(w))) {
-    return false;
-  }
-  
   const casualWords = [
     '嗯', '嗯嗯', '好的', '好', '你好', '嗨', '哈喽', 'hello', 'hi', 'hey',
     '谢谢', '多谢', '感谢', '不客气', '没事', '没关系',
@@ -2719,6 +2910,8 @@ function isCasualChat(message) {
     '对对', '好好', '行行', '是是', '嗯嗯', '哦哦', '啊啊'
   ];
   
+  const messageLower = message.toLowerCase().trim();
+  
   // 如果消息完全匹配日常词汇，或者是单个标点符号
   if (casualWords.includes(messageLower)) {
     return true;
@@ -2742,87 +2935,73 @@ function isCasualChat(message) {
   return false;
 }
 
-// v5 P0-2: 优化的相似度算法 - 分词 + 多维度评分
-function calculateSimilarity(query, question, keywords) {
-  const ql = query.toLowerCase().trim();
-  const kl = question.toLowerCase().trim();
+// Jaccard 相似度（基于 n-gram，比 Levenshtein 更快）
+function jaccardSimilarity(str1, str2, n = 2) {
+  if (str1.length < n || str2.length < n) return 0;
   
-  if (ql.length <= 1) return 0;
-  if (ql === kl) return 1;
-  
-  // 分词
-  const qw = segmentWords(ql);
-  const kw = segmentWords(kl);
-  
-  // 词频匹配得分
-  let wordScore = 0;
-  const qs = new Set(qw);
-  const ks = new Set(kw);
-  for (const w of qs) {
-    if (w.length < 2) continue;
-    if (ks.has(w)) wordScore += 1;
-    else if (kl.includes(w)) wordScore += 0.5;
-  }
-  if (qs.size > 0) wordScore /= qs.size;
-  
-  // 精确边界匹配
-  let containScore = 0;
-  if (ql.length >= 4 && kl.includes(ql)) {
-    containScore = 0.8;
-  } else if (ql.length >= 3 && kl.includes(ql)) {
-    const idx = kl.indexOf(ql);
-    const isBoundary = idx === 0 || /\s/.test(kl[idx - 1]) || 
-                       idx + ql.length === kl.length || /\s/.test(kl[idx + ql.length]);
-    containScore = isBoundary ? 0.7 : 0.3;
-  }
-  
-  // 关键词高权重
-  let keywordScore = 0;
-  if (keywords) {
-    for (const k of keywords.toLowerCase().split(',').map(x => x.trim()).filter(x => x.length >= 2)) {
-      if (ql.includes(k)) keywordScore = Math.max(keywordScore, 0.85);
+  const getNgrams = (str) => {
+    const ngrams = new Set();
+    for (let i = 0; i <= str.length - n; i++) {
+      ngrams.add(str.substring(i, i + n));
     }
-  }
+    return ngrams;
+  };
   
-  // 编辑距离相似度
-  const ed = 1 - levenshteinDistance(ql, kl) / Math.max(ql.length, kl.length);
+  const ngrams1 = getNgrams(str1);
+  const ngrams2 = getNgrams(str2);
   
-  // 综合评分
-  let final = Math.max(
-    wordScore * 0.25 + containScore * 0.25 + keywordScore * 0.35 + ed * 0.15,
-    containScore,
-    keywordScore
-  );
+  let intersection = 0;
+  ngrams1.forEach(ng => {
+    if (ngrams2.has(ng)) intersection++;
+  });
   
-  // 短查询降级
-  if (ql.length <= 3 && final > 0.5) final *= 0.7;
-  if (/[\u4e00-\u9fa5]/.test(ql) && ql.length <= 4 && !keywordScore) final *= 0.8;
-  
-  return Math.min(1, Math.max(0, final));
+  const union = ngrams1.size + ngrams2.size - intersection;
+  return union === 0 ? 0 : intersection / union;
 }
 
-// v5: 分词函数
-function segmentWords(text) {
-  const words = [];
-  let current = '';
-  let isEng = false;
-  for (const char of text) {
-    const isEngChar = /[a-z0-9]/i.test(char);
-    if (isEngChar) {
-      if (!isEng && current) { words.push(current); current = ''; }
-      current += char;
-      isEng = true;
-    } else if (char === ' ') {
-      if (current) { words.push(current); current = ''; }
-      isEng = false;
-    } else {
-      if (isEng && current) { words.push(current); current = ''; }
-      words.push(char);
-      isEng = false;
+function calculateSimilarity(query, question, keywords) {
+  const queryLower = query.toLowerCase().trim();
+  const questionLower = question.toLowerCase().trim();
+  
+  // 忽略过短的查询
+  if (queryLower.length <= 1) return 0;
+  
+  // 完全匹配
+  if (queryLower === questionLower) return 1.0;
+  
+  // 包含匹配
+  if (queryLower.length >= 2) {
+    if (questionLower.includes(queryLower)) return 0.75;
+    if (queryLower.includes(questionLower) && questionLower.length >= 3) return 0.75;
+  }
+  
+  // 关键词匹配
+  if (keywords) {
+    const keywordList = keywords.toLowerCase().split(',').map(k => k.trim()).filter(k => k);
+    for (const keyword of keywordList) {
+      if (keyword.length >= 2 && queryLower.includes(keyword)) {
+        return 0.7;
+      }
     }
   }
-  if (current) words.push(current);
-  return words.filter(w => w.length > 0);
+  
+  // 使用 Jaccard 相似度（快速）
+  const jaccard = jaccardSimilarity(queryLower, questionLower);
+  
+  // 短字符串或 Jaccard 较高时直接返回
+  if (queryLower.length <= 6 || jaccard >= 0.4) {
+    return Math.min(0.65, jaccard + 0.1);
+  }
+  
+  // 长字符串用 Levenshtein（更精确）
+  const maxLen = Math.max(query.length, question.length);
+  if (maxLen === 0) return 1.0;
+  
+  const distance = levenshteinDistance(queryLower, questionLower);
+  const levenshteinSim = 1 - distance / maxLen;
+  
+  // 取两种方法的最大值
+  return Math.max(jaccard, levenshteinSim * 0.9);
 }
 
 function levenshteinDistance(str1, str2) {
@@ -2849,313 +3028,96 @@ function levenshteinDistance(str1, str2) {
   return matrix[str2.length][str1.length];
 }
 
-// v5 P0-3: 对话上下文管理
-async function getConversationContext(env, chatId, userId, maxTurns = 5) {
-  try {
-    const result = await env.DB.prepare(
-      "SELECT role, message FROM conversation_context WHERE chat_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?"
-    ).bind(chatId, userId, maxTurns * 2).all();
-    return (result.results || []).reverse();
-  } catch (e) {
-    return [];
-  }
-}
-
-async function saveConversationContext(env, chatId, userId, role, message, intent = null) {
-  try {
-    await env.DB.prepare(
-      "INSERT INTO conversation_context(chat_id, user_id, role, message, intent) VALUES(?, ?, ?, ?, ?)"
-    ).bind(chatId, userId, role, message, intent).run();
-    // 清理24小时前的记录
-    await env.DB.prepare(
-      "DELETE FROM conversation_context WHERE created_at < datetime('now', '-24 hours')"
-    ).run();
-  } catch (e) {}
-}
-
-// 判断是否为追问
-function isFollowUpQuestion(message, context) {
-  const m = message.toLowerCase();
-  const indicators = ['然后呢', '那', '还有呢', '为什么', '怎么办', '怎么处理', '然后', '不是说', '可是', '但是', '具体', '详细'];
-  if (indicators.some(i => m.startsWith(i) || m.includes(i))) return true;
-  if (context && context.length > 0) {
-    const pronouns = ['它', '那个', '这个', '上面', '刚才', '之前'];
-    if (pronouns.some(p => m.includes(p)) && m.length < 15) return true;
-  }
-  return false;
-}
-
-// v5 P0-4: 回答缓存
-async function getCachedAnswer(env, question) {
-  try {
-    const hash = simpleHash(question.toLowerCase().trim());
-    const result = await env.DB.prepare(
-      "SELECT answer, answer_type, similarity, hit_count FROM answer_cache WHERE question_hash = ? AND expires_at > datetime('now')"
-    ).bind(hash).first();
-    if (result) {
-      // 更新命中次数
-      await env.DB.prepare(
-        "UPDATE answer_cache SET hit_count = hit_count + 1, last_hit = datetime('now') WHERE question_hash = ?"
-      ).bind(hash).run();
-      return result;
-    }
-  } catch (e) {}
-  return null;
-}
-
-async function saveCachedAnswer(env, question, answer, answerType, similarity) {
-  try {
-    const hash = simpleHash(question.toLowerCase().trim());
-    await env.DB.prepare(
-      "INSERT OR REPLACE INTO answer_cache(question_hash, question, answer, answer_type, similarity, expires_at) VALUES(?, ?, ?, ?, ?, datetime('now', '+7 days'))"
-    ).bind(hash, question, answer, answerType, similarity).run();
-  } catch (e) {}
-}
-
-// 简单哈希函数
-function simpleHash(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return hash.toString(16);
-}
-
-// v5 P0-7: 称呼风格配置
-// v5 P0-8: 多轮澄清
-function detectAmbiguousMatches(matches) {
-  if (matches.length >= 2 && 
-      matches[0].similarity >= 0.6 && 
-      matches[1].similarity >= 0.6 && 
-      Math.abs(matches[0].similarity - matches[1].similarity) < 0.1) {
-    return {
-      ambiguous: true,
-      options: matches.slice(0, 3).map((m, i) => ({ index: i + 1, question: m.question, sim: m.similarity })),
-      msg: '您是想问：\n' + matches.slice(0, 3).map((m, i) => (i + 1) + '. ' + m.question).join('\n') + '\n\n请回复数字选择~'
-    };
-  }
-  return { ambiguous: false };
-}
-
-function handleClarifyChoice(text, matches) {
-  const num = parseInt(text.trim());
-  if (num >= 1 && num <= matches.length) {
-    return { selected: true, match: matches[num - 1] };
-  }
-  return { selected: false };
-}
-
-// v5 P1-3: 热度分析
-async function analyzeHotnessStats(env) {
-  try {
-    const result = await env.DB.prepare(
-      "SELECT ka.id, ka.answer, ka.use_count FROM knowledge_answers ka WHERE ka.enabled = 1 ORDER BY ka.use_count DESC"
-    ).all();
-    
-    const hot = [];
-    const cold = [];
-    
-    for (const item of (result.results || [])) {
-      if ((item.use_count || 0) >= 10) {
-        hot.push({
-          id: item.id,
-          answer: item.answer.substring(0, 50),
-          useCount: item.use_count || 0
-        });
-      } else if ((item.use_count || 0) === 0) {
-        cold.push({
-          id: item.id,
-          answer: item.answer.substring(0, 50),
-          useCount: 0
-        });
-      }
-    }
-    
-    return { hot: hot.slice(0, 10), cold: cold.slice(0, 10) };
-  } catch (e) {
-    return { hot: [], cold: [] };
-  }
-}
-
-// v5 P2: 配额控制
-async function getQuotaStatus(env) {
-  try {
-    const [usageResult, configResult] = await Promise.all([
-      env.DB.prepare("SELECT COALESCE(SUM(neurons), 0) as total FROM ai_calls WHERE DATE(created_at) = DATE('now')").first(),
-      env.DB.prepare("SELECT ai_daily_limit FROM bot_config WHERE id = 1").first()
-    ]);
-    
-    const used = usageResult?.total || 0;
-    const limit = configResult?.ai_daily_limit || 9000;
-    const threshold = Math.floor(limit * 0.9);
-    
-    return {
-      used,
-      limit,
-      threshold,
-      remaining: Math.max(0, limit - used),
-      warningLevel: used >= threshold ? (used >= limit ? 'danger' : 'warning') : 'normal',
-      percentUsed: Math.round((used / limit) * 100)
-    };
-  } catch (e) {
-    return {
-      used: 0,
-      limit: 9000,
-      threshold: 8100,
-      remaining: 9000,
-      warningLevel: 'normal',
-      percentUsed: 0
-    };
-  }
-}
-
-// v5 P0-5: 情感分析
-function analyzeEmotion(message) {
-  const m = message.toLowerCase();
-  // 愤怒情绪
-  if (['气死', '烦死', '恶心', '投诉', '退款', '差评', '怒了', '火大', '垃圾', '骗子', '坑人', '滚', '傻逼', '他妈的'].some(x => m.includes(x))) {
-    return 'angry';
-  }
-  // 开心情绪
-  if (['谢谢', '太好了', '太棒了', '爱你', '么么哒', '好评', '感谢', '给力', '厉害', '赞', '完美', '优秀', '不错', '好用'].some(x => m.includes(x))) {
-    return 'happy';
-  }
-  // 困惑情绪
-  if (['不懂', '不明白', '怎么回事', '搞不懂', '晕', '迷糊', '懵', '啥', '什么鬼', '怎么用', '不会用', '求助'].some(x => m.includes(x))) {
-    return 'confused';
-  }
-  return 'neutral';
-}
-
-// v5 P0-6: 智能推荐（基于热度）
-async function getSmartRecommendations(env, category = null, limit = 3) {
-  try {
-    let sql = `
-      SELECT kq.question, ka.use_count, ka.satisfaction_score 
-      FROM knowledge_questions kq 
-      JOIN knowledge_answers ka ON kq.answer_id = ka.id 
-      WHERE kq.enabled = 1 AND ka.enabled = 1
-    `;
-    if (category) {
-      sql += ` AND ka.category = ?`;
-    }
-    sql += ` ORDER BY (ka.use_count * 0.6 + ka.satisfaction_score * 0.4) DESC LIMIT ?`;
-    
-    const result = category 
-      ? await env.DB.prepare(sql).bind(category, limit).all()
-      : await env.DB.prepare(sql).bind(limit).all();
-    
-    return result.results || [];
-  } catch (e) {
-    return [];
-  }
-}
-
-// AI生成答案
-async function generateAIAnswer(env, userQuestion, matches, config, conversationContext = []) {
+// AI生成答案 - 优化版
+async function generateAIAnswer(env, userQuestion, matches, config) {
   try {
     console.log('generateAIAnswer called, similarity:', matches[0].similarity);
     
-    // 高相似度直接返回答案
+    // 高相似度直接返回知识库答案，无需 AI
     if (matches[0].similarity >= 0.7) {
       console.log('High similarity, skipping AI');
+      // 多答案随机选择
+      const answers = matches[0].answer.split('\n').filter(a => a.trim());
+      if (answers.length > 1) {
+        return answers[Math.floor(Math.random() * answers.length)];
+      }
       return matches[0].answer;
     }
     
-    // v5 P0-3: 检测是否是追问
-    const isFollowUp = conversationContext.length > 0 && isFollowUpQuestion(userQuestion, conversationContext);
-    console.log('Is follow-up question:', isFollowUp);
-    
-    // 检查AI每日neurons消耗配额（免费额度10000，超过90%即9000时暂停）
+    // 检查 AI 配额
     const FREE_TIER_LIMIT = 10000;
-    const WARNING_THRESHOLD = 0.9; // 90%
-    const MAX_DAILY_NEURONS = Math.floor(FREE_TIER_LIMIT * WARNING_THRESHOLD); // 9000
+    const MAX_DAILY_NEURONS = Math.floor(FREE_TIER_LIMIT * 0.9); // 9000
     
-    const today = new Date().toISOString().split('T')[0];
-    
-    // 计算今日已使用的neurons
     const aiUsageResult = await env.DB.prepare(
       "SELECT COALESCE(SUM(neurons), 0) as total FROM ai_calls WHERE DATE(created_at) = DATE('now')"
     ).first();
     
     const todayNeurons = aiUsageResult?.total || 0;
-    console.log('AI neurons used today:', todayNeurons, 'Limit:', MAX_DAILY_NEURONS);
-    
     if (todayNeurons >= MAX_DAILY_NEURONS) {
-      console.log('AI daily neurons limit reached (90% of free tier), switching to KB answers only');
+      console.log('AI quota reached, using KB answer');
       return matches[0].answer;
     }
     
-    // 获取前言内容
-    const contextResult = await env.DB.prepare(
-      'SELECT title, content FROM knowledge_context WHERE enabled = 1 ORDER BY priority DESC, id ASC'
-    ).all();
+    if (!env.AI) {
+      return matches[0].answer;
+    }
     
+    // 获取对话历史（多轮对话支持）
+    // 获取前言内容（缓存）
+    const contextResult = await env.DB.prepare(
+      'SELECT title, content FROM knowledge_context WHERE enabled = 1 ORDER BY priority DESC, id ASC LIMIT 3'
+    ).all();
     const contextContents = contextResult.results || [];
     const contextText = contextContents.map(c => `【${c.title}】\n${c.content}`).join('\n\n');
     
-    // 构建知识库上下文
-    const kbContext = matches.slice(0, 2).map((m, i) => {
-      return `参考${i + 1}：\n问题：${m.question}\n答案：${m.answer}`;
-    }).join('\n\n');
+    // 构建知识库上下文（最多3条参考）
+    const kbContext = matches.slice(0, 3).map((m, i) =>
+      `参考${i + 1}：\n问题：${m.question}\n答案：${m.answer}`
+    ).join('\n\n');
     
-    // 如果AI不可用，直接返回知识库答案
-    if (!env.AI) {
-      console.log('AI not available (env.AI is falsy)');
-      return matches[0].answer;
-    }
-    console.log('AI is available, proceeding with AI call');
+    // 优化后的 System Prompt - 更简洁、更精准
+    const systemPrompt = [
+      '你是专业客服助手，只能根据知识库内容回答问题。',
+      '规则：',
+      '1. 只用知识库中的信息，不编造',
+      '2. 回答简洁，不超过100字',
+      '3. 没有相关信息时，直接返回最接近的知识库答案',
+      '4. 不要说"根据知识库"等废话，直接给答案',
+      contextText ? `\n背景信息：\n${contextText}` : '',
+      `\n知识库：\n${kbContext}`
+    ].filter(Boolean).join('\n');
     
-    // v5 P0-3: 构建对话上下文文本
-    let contextHistory = '';
-    if (conversationContext.length > 0) {
-      contextHistory = '\n\n对话历史：\n' + conversationContext.map(c =>
-        `${c.role === 'user' ? '用户' : '客服'}: ${c.message}`
-      ).join('\n');
-    }
-
-    let systemPrompt;
-    const baseRules = `重要规则：\n1. 只能使用知识库中提供的答案内容\n2. 不要添加知识库中没有的信息\n3. 不要自由发挥或编造内容\n4. 如果知识库中没有相关信息，请直接返回知识库中的第一个答案${isFollowUp ? '\n5. 用户正在追问，请结合对话历史给出连贯的回复' : ''}`;
-
-    if (contextText) {
-      systemPrompt = `你是客服助手。请严格根据以下背景知识和知识库内容回答用户问题。${contextHistory}\n\n${baseRules}\n\n背景知识：\n${contextText}\n\n知识库：\n${kbContext}`;
-    } else {
-      systemPrompt = `你是客服助手。请严格根据以下知识库内容回答用户问题。${contextHistory}\n\n${baseRules}\n\n知识库：\n${kbContext}`;
-    }
-
+    const response = await env.AI.run('@cf/meta/llama-3.2-1b-instruct', {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userQuestion }
+      ],
+      temperature: 0.2,   // 降低随机性，更稳定
+      max_tokens: 150      // 限制输出长度，节省配额
+    });
+    
+    const aiAnswer = response.response?.trim();
+    
+    // 记录 AI 调用
     try {
-      const response = await env.AI.run('@cf/meta/llama-3.2-1b-instruct', {
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userQuestion }
-        ],
-        temperature: 0.3,
-        max_tokens: 200
-      });
+      const inputTokens = Math.ceil((systemPrompt.length + userQuestion.length) / 4);
+      const outputTokens = Math.ceil((aiAnswer?.length || 0) / 4);
+      const estimatedNeurons = Math.max(100, (inputTokens + outputTokens) * 10);
       
-      // 记录AI调用和neurons消耗
-      console.log('Recording AI call to database...');
-      try {
-        // 估算neurons消耗（基于输入输出token）
-        const inputTokens = Math.ceil((systemPrompt.length + userQuestion.length) / 4);
-        const outputTokens = Math.ceil((response.response?.length || 0) / 4);
-        const estimatedNeurons = Math.max(100, (inputTokens + outputTokens) * 10); // 基础100 + token消耗
-        
-        const insertResult = await env.DB.prepare(
-          'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence, neurons) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(0, 0, userQuestion, 'answer_generation', 0.9, estimatedNeurons).run();
-        console.log('AI call recorded successfully, neurons:', estimatedNeurons, 'result:', insertResult);
-      } catch (err) {
-        console.error('Failed to record AI call:', err);
-      }
-      
-      return response.response?.trim() || matches[0].answer;
-    } catch (aiError) {
-      console.error('AI answer generation error:', aiError);
+      await env.DB.prepare(
+        'INSERT INTO ai_calls (chat_id, user_id, message, intent, confidence, neurons) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(0, 0, userQuestion, 'answer_generation', 0.9, estimatedNeurons).run();
+    } catch (err) {
+      console.error('Failed to record AI call:', err);
+    }
+    
+    // 验证 AI 回答质量：如果太短或无意义，回退到知识库
+    if (!aiAnswer || aiAnswer.length < 5) {
+      console.log('AI answer too short, falling back to KB');
       return matches[0].answer;
     }
+    
+    return aiAnswer;
   } catch (error) {
     console.error('Generate AI answer error:', error);
     return matches[0].answer;
@@ -3190,51 +3152,126 @@ function getPersonalizedNickname(userName) {
   return prefix + (userName || '小伙伴') + suffix;
 }
 
-// v5: 整合称呼和情感分析的回复生成
-function addPersonalizedGreetingWithEmotion(responseText, userName, emotion) {
+// 为回答添加个性化称呼前缀（奶凶风格）
+function addPersonalizedGreeting(responseText, userName) {
   const nickname = getPersonalizedNickname(userName);
-  
-  // 根据情绪选择不同的称呼风格
-  let greeting, ending;
-  
-  switch (emotion) {
-    case 'angry':
-      // 用户愤怒时，用安抚语气
-      greeting = `🙏 ${nickname}，非常抱歉给您带来不便！`;
-      ending = `😔 我们会努力改进，如果还有其他问题请随时告诉我~`;
-      break;
-    case 'confused':
-      // 用户困惑时，用耐心解释语气
-      greeting = `💡 ${nickname}，让我详细为您解释：`;
-      ending = `🤗 如果还有不清楚的地方，随时问我哦~`;
-      break;
-    case 'happy':
-      // 用户开心时，用友好语气
-      greeting = `😊 ${nickname}，很高兴为您服务！`;
-      ending = `🎉 有其他问题随时找我，祝您使用愉快！`;
-      break;
-    default:
-      // 默认奶凶风格
-      const defaultGreetings = [
-        `😤 ${nickname}，听好了！`,
-        `🙄 ${nickname}，这个问题还要问？`,
-        `😒 ${nickname}，看清楚了：`,
-        `😏 ${nickname}，这么简单都不知道？`,
-        `😐 ${nickname}，给你说一次：`,
-        `😌 ${nickname}，让我告诉你：`,
-        `🤨 ${nickname}，认真听着：`
-      ];
-      const defaultEndings = [
-        `💬 还有问题就继续问吧~`,
-        `✨ 记住了没？`,
-        `🎯 明白了吗？`,
-        `🤗 不客气啦~`,
-        `😏 下次别再问这个了哈！`
-      ];
-      greeting = defaultGreetings[Math.floor(Math.random() * defaultGreetings.length)];
-      ending = defaultEndings[Math.floor(Math.random() * defaultEndings.length)];
-  }
-  
+  const greetings = [
+    `😤 ${nickname}，听好了！`,
+    `🙄 ${nickname}，这个问题还要问？`,
+    `😒 ${nickname}，看清楚了：`,
+    `😏 ${nickname}，这么简单都不知道？`,
+    `😐 ${nickname}，给你说一次：`,
+    `😑 ${nickname}，记住了啊：`,
+    `🙃 ${nickname}，真是拿你没办法：`,
+    `😶 ${nickname}，自己看吧：`,
+    `😌 ${nickname}，让我告诉你：`,
+    `🤨 ${nickname}，认真听着：`,
+    `😬 ${nickname}，别走神啊：`,
+    `🫤 ${nickname}，就这一次啊：`,
+    `😮‍💨 ${nickname}，叹气...`,
+    `🤦 ${nickname}，扶额...`,
+    `😵‍💫 ${nickname}，晕...`,
+    `🤐 ${nickname}，好吧好吧：`,
+    `😡 ${nickname}，气死我了！`,
+    `🥺 ${nickname}，求求你用用脑子吧：`,
+    `😤 ${nickname}，我要生气了！`,
+    `🙃 ${nickname}，你是不是故意的？`,
+    `😒 ${nickname}，我怀疑你在耍我：`,
+    `🤔 ${nickname}，让我想想怎么说你才能懂：`,
+    `😏 ${nickname}，准备好记笔记了吗？`,
+    `😐 ${nickname}，我尽量说简单点：`,
+    `😌 ${nickname}，深呼吸...不生气：`,
+    `🤷 ${nickname}，我也没办法了：`,
+    `😅 ${nickname}，这个问题有点意思：`,
+    `🙄 ${nickname}，你确定你没问过吗？`,
+    `😤 ${nickname}，最后一次了啊！`,
+    `😶 ${nickname}，我无语了...`,
+    `🫠 ${nickname}，我的耐心正在消失：`,
+    `😵 ${nickname}，被你打败了：`,
+    `🤦‍♀️ ${nickname}，让我静静...`,
+    `😮 ${nickname}，这你都不知道？`,
+    `🙃 ${nickname}，我投降了：`,
+    `😤 ${nickname}，严肃点！`,
+    `🤨 ${nickname}，你认真听了吗？`,
+    `😒 ${nickname}，我再说最后一遍：`,
+    `🙄 ${nickname}，你是不是没睡醒？`,
+    `😌 ${nickname}，慢慢说，不着急：`,
+    `🤗 ${nickname}，虽然你很笨，但我还是告诉你吧：`
+  ];
+  const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+
+  const endings = [
+    `💬 还有问题就继续问吧~`,
+    `✨ 记住了没？`,
+    `🎯 明白了吗？`,
+    `💡 懂了吗小迷糊？`,
+    `😌 这下清楚了吧？`,
+    `📝 记在小本本上啊！`,
+    `🤗 不客气啦~`,
+    `😏 下次别再问这个了哈！`,
+    `🙄 再不懂我就...我就再讲一遍！`,
+    `😤 这可是最后一次了啊！`,
+    `🤨 真的记住了？别骗我哦~`,
+    `😒 我讲得这么清楚，再不会打你哦`,
+    `🫠 我的耐心快被你耗光了...`,
+    `🙃 你这个小迷糊，真拿你没办法`,
+    `😮‍💨 叹气...你怎么这么笨呢`,
+    `🤦 扶额...我太难了`,
+    `😵 被你问得头晕...`,
+    `🤐 算了算了，你自己琢磨吧`,
+    `😌 终于讲完了，累死我了`,
+    `🙏 求求你记住吧，别再问了`,
+    `💢 哼！下次自己查！`,
+    `🌟 好了好了，去玩吧小淘气`,
+    `🎉 恭喜你，又学会了一个知识点！`,
+    `🏃 溜了溜了，问别人去吧~`,
+    `😤 记住了吗？没记住我也不管了！`,
+    `🙄 我真的尽力了...`,
+    `😒 你要是再忘，我就...我就哭给你看！`,
+    `🤷 反正我说了，听没听随你`,
+    `😅 我讲得口干舌燥，你听懂了吗？`,
+    `🙃 好了好了，别再折磨我了`,
+    `😌 终于解脱了...`,
+    `🤗 虽然你很笨，但我还是爱你的~`,
+    `😏 下次问点有难度的，这个太简单了`,
+    `😐 我怀疑你在测试我的耐心`,
+    `😤 最后一次！真的是最后一次！`,
+    `🙄 你是不是故意来气我的？`,
+    `😒 我再说一遍，这次真的最后一遍！`,
+    `🫠 我的天，你怎么还在问这个`,
+    `😵 被你打败了，彻底打败了`,
+    `🤐 好了，我闭嘴了`,
+    `😌 呼...终于说完了`,
+    `🙏 拜托拜托，记住吧`,
+    `💢 哼！不理你了！`,
+    `🌟 乖~记住了就奖励你一颗糖`,
+    `🎉 撒花~你又变聪明了一点！`,
+    `🏃 拜拜了您嘞~`,
+    `😤 记住了啊！下次再问我就生气了！`,
+    `🙄 我真的服了你了...`,
+    `😒 你要是再记不住，我就...我就...算了`,
+    `🤷 随便吧，反正我说了`,
+    `😅 哈哈，你是不是觉得我很凶？`,
+    `🙃 好了好了，不凶你了`,
+    `😌 深呼吸，不生气，不生气`,
+    `🤗 抱抱~虽然你笨笨的`,
+    `😏 下次记得请我吃糖哦~`,
+    `😐 我说完了，你自便`,
+    `😤 记住了！记住了！记住了！`,
+    `🙄 你是不是在故意逗我玩？`,
+    `😒 我累了，真的累了`,
+    `🫠 我的耐心值：0%`,
+    `😵 被你问得怀疑人生...`,
+    `🤐 好了，我去静静`,
+    `😌 终于结束了...`,
+    `🙏 感谢收听，下次再见`,
+    `💢 哼！下次问别人去！`,
+    `🌟 好了，去玩吧，别烦我了`,
+    `🎉 恭喜毕业！这个问题你学会了！`,
+    `🏃 我溜了，你慢慢消化`
+  ];
+  const ending = endings[Math.floor(Math.random() * endings.length)];
+
   return `${greeting}\n${responseText}\n${ending}`;
 }
 
@@ -3549,32 +3586,24 @@ async function getAllKnowledge(env) {
 
 async function getKnowledge(id, env) {
   try {
-    // 获取当前答案
-    const answer = await env.DB.prepare('SELECT * FROM knowledge_answers WHERE id = ?').bind(id).first();
+    // 获取答案
+    const answer = await env.DB.prepare(
+      'SELECT * FROM knowledge_answers WHERE id = ?'
+    ).bind(id).first();
     if (!answer) return jsonResponse({ error: 'Not found' }, 404);
     
-    // 获取当前答案的问题
-    const questions = await env.DB.prepare('SELECT question FROM knowledge_questions WHERE answer_id = ? AND enabled = 1').bind(id).all();
-    const questionList = questions.results.map(q => q.question);
-    
-    // 查找所有相同问题的答案
-    const allAnswers = await env.DB.prepare(`
-      SELECT ka.id, ka.answer
-      FROM knowledge_answers ka
-      JOIN knowledge_questions kq ON ka.id = kq.answer_id
-      WHERE kq.question IN (${questionList.map(() => '?').join(',')})
-      AND ka.enabled = 1
-      GROUP BY ka.id
-    `).bind(...questionList).all();
-    
-    const answerList = allAnswers.results.map(a => a.answer);
+    // 获取该答案的所有问题
+    const questions = await env.DB.prepare(
+      'SELECT question FROM knowledge_questions WHERE answer_id = ? AND enabled = 1'
+    ).bind(id).all();
+    const questionList = (questions.results || []).map(q => q.question);
     
     return jsonResponse({
       id: answer.id,
       answer: answer.answer,
-      answers: answerList,
-      category: answer.category,
-      keywords: answer.keywords,
+      answers: [answer.answer],
+      category: answer.category || '',
+      keywords: answer.keywords || '',
       questions: questionList
     });
   } catch (error) {
@@ -3587,41 +3616,32 @@ async function addKnowledge(request, env) {
     const body = await request.json();
     const { answers, questions, category, keywords } = body;
     
-    // 兼容旧格式（单答案）
+    // 兼容旧格式
     const answerList = answers || (body.answer ? [body.answer] : []);
     
     if (!answerList || answerList.length === 0 || !questions || questions.length === 0) {
       return jsonResponse({ error: 'answers and questions are required' }, 400);
     }
     
-    // 输入验证
-    for (const answer of answerList) {
-      if (answer.length > 2000) {
-        return jsonResponse({ error: 'answer too long (max 2000 chars)' }, 400);
-      }
-    }
-    if (questions.length > 50) {
-      return jsonResponse({ error: 'too many questions (max 50)' }, 400);
+    if (answerList.some(a => a.length > 2000) || questions.length > 50) {
+      return jsonResponse({ error: 'Input too long' }, 400);
     }
     
     const answerIds = [];
     
-    // 为每个答案创建一条记录
+    // 为每个答案创建记录，并关联所有问题
     for (const answer of answerList) {
-      await env.DB.prepare(
+      const result = await env.DB.prepare(
         'INSERT INTO knowledge_answers (answer, category, keywords) VALUES (?, ?, ?)'
       ).bind(answer, category || '', keywords || '').run();
       
-      const lastIdResult = await env.DB.prepare('SELECT last_insert_rowid() as id').first();
-      const answerId = lastIdResult?.id;
-      
+      const answerId = result.meta?.last_row_id;
       if (!answerId) {
-        return jsonResponse({ error: 'Failed to get answer ID' }, 500);
+        return jsonResponse({ error: 'Failed to create answer' }, 500);
       }
-      
       answerIds.push(answerId);
       
-      // 为每个答案添加所有问题
+      // 为该答案添加所有问题
       for (const question of questions) {
         if (question.trim()) {
           await env.DB.prepare(
@@ -3631,9 +3651,10 @@ async function addKnowledge(request, env) {
       }
     }
     
-    // 记录操作日志
-    await logOperation(env, 'add', '添加知识库条目', '问题: ' + questions.join(', ').substring(0, 100), request);
+    // 清除关键词缓存
+    keywordsCache = null;
     
+    await logOperation(env, 'add', '添加知识', '问题: ' + questions.join(', ').substring(0, 100), request);
     return jsonResponse({ success: true, ids: answerIds });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
@@ -3645,36 +3666,28 @@ async function updateKnowledge(id, request, env) {
     const body = await request.json();
     const { answers, questions, category, keywords } = body;
     
-    // 兼容旧格式（单答案）
+    // 兼容旧格式
     const answerList = answers || (body.answer ? [body.answer] : []);
     
     if (!answerList || answerList.length === 0 || !questions || questions.length === 0) {
       return jsonResponse({ error: 'answers and questions are required' }, 400);
     }
     
-    // 获取该答案组的所有相关答案ID
-    const existingAnswers = await env.DB.prepare(
-      'SELECT id FROM knowledge_answers WHERE id = ? OR id IN (SELECT answer_id FROM knowledge_questions WHERE question IN (SELECT question FROM knowledge_questions WHERE answer_id = ?))'
-    ).bind(id, id).all();
-    
-    const existingIds = existingAnswers.results?.map(r => r.id) || [id];
-    
-    // 删除所有旧的问题关联
-    for (const answerId of existingIds) {
-      await env.DB.prepare('DELETE FROM knowledge_questions WHERE answer_id = ?').bind(answerId).run();
+    // 验证答案存在
+    const existing = await env.DB.prepare('SELECT id FROM knowledge_answers WHERE id = ?').bind(id).first();
+    if (!existing) {
+      return jsonResponse({ error: 'Answer not found' }, 404);
     }
     
-    // 删除多余的旧答案记录（保留第一个用于更新）
-    for (let i = 1; i < existingIds.length; i++) {
-      await env.DB.prepare('DELETE FROM knowledge_answers WHERE id = ?').bind(existingIds[i]).run();
-    }
-    
-    // 更新第一个答案
+    // 更新答案内容（只更新主答案）
     await env.DB.prepare(
       'UPDATE knowledge_answers SET answer = ?, category = ?, keywords = ? WHERE id = ?'
-    ).bind(answerList[0], category, keywords, id).run();
+    ).bind(answerList[0], category || '', keywords || '', id).run();
     
-    // 为第一个答案添加所有问题
+    // 删除该答案的所有旧问题
+    await env.DB.prepare('DELETE FROM knowledge_questions WHERE answer_id = ?').bind(id).run();
+    
+    // 重新插入所有问题（关联到主答案 id）
     for (const question of questions) {
       if (question.trim()) {
         await env.DB.prepare(
@@ -3683,30 +3696,29 @@ async function updateKnowledge(id, request, env) {
       }
     }
     
-    // 如果有更多答案，创建新的答案记录
-    const answerIds = [id];
+    // 如果有新答案，创建新的答案记录并关联相同问题
     for (let i = 1; i < answerList.length; i++) {
-      await env.DB.prepare(
+      const result = await env.DB.prepare(
         'INSERT INTO knowledge_answers (answer, category, keywords) VALUES (?, ?, ?)'
       ).bind(answerList[i], category || '', keywords || '').run();
       
-      const lastIdResult = await env.DB.prepare('SELECT last_insert_rowid() as id').first();
-      const newAnswerId = lastIdResult?.id;
-      
-      if (newAnswerId) {
-        answerIds.push(newAnswerId);
-        // 为新答案添加所有问题
+      const newId = result.meta?.last_row_id;
+      if (newId) {
         for (const question of questions) {
           if (question.trim()) {
             await env.DB.prepare(
               'INSERT INTO knowledge_questions (answer_id, question, keywords) VALUES (?, ?, ?)'
-            ).bind(newAnswerId, question.trim(), keywords || '').run();
+            ).bind(newId, question.trim(), keywords || '').run();
           }
         }
       }
     }
     
-    return jsonResponse({ success: true, ids: answerIds });
+    // 清除关键词缓存
+    keywordsCache = null;
+    
+    await logOperation(env, 'update', '更新知识', 'ID: ' + id + ', 问题: ' + questions.join(', ').substring(0, 100), request);
+    return jsonResponse({ success: true, id });
   } catch (error) {
     return jsonResponse({ error: error.message }, 500);
   }

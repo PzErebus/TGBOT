@@ -2,7 +2,7 @@ name = "telegram-keyword-bot"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
-# 数据库配置 - 主数据库（telegram-keywords-db）
+# 数据库配置
 [[d1_databases]]
 binding = "DB"
 database_name = "telegram-keywords-db"
@@ -12,8 +12,7 @@ database_id = "c73f760d-3be7-4895-8fa7-dff7a1fbbd26"
 [ai]
 binding = "AI"
 
-# 环境变量
-[vars]
-TELEGRAM_BOT_TOKEN = "8759840879:AAEYfyNYXYBgw5mrpoHuLYAxecsN_7SIAts"
-ADMIN_TOKEN = "admin"
-USER_TOKEN = "user"
+# 环境变量 - 请通过 wrangler secret put 设置以下值：
+# wrangler secret put TELEGRAM_BOT_TOKEN
+# wrangler secret put ADMIN_TOKEN  
+# wrangler secret put USER_TOKEN
